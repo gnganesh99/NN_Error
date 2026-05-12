@@ -1,4 +1,4 @@
-from . import im2spec_models, nn_combiners
+from . import im2spec_models, neuralop_im2spec, nn_combiners
 from .im2spec_models import (
     CustomDecoder,
     DecoderModule,
@@ -21,9 +21,15 @@ from .nn_combiners import (
     ensemble_error_model as CombinerEnsembleErrorModel,
     error_model as CombinerErrorModel,
 )
+from .neuralop_im2spec import (
+    Encoder_Wrapper as FNOEncoderWrapper,
+    FNO_im2spec,
+    FNOEncoder,
+)
 
 __all__ = [
     "im2spec_models",
+    "neuralop_im2spec",
     "nn_combiners",
     "im2spec",
     "im2spec_2",
@@ -43,4 +49,7 @@ __all__ = [
     "CombinerEnsembleErrorModel",
     "CombinerDecoderModule",
     "CombinerCustomDecoder",
+    "FNOEncoder",
+    "FNO_im2spec",
+    "FNOEncoderWrapper",
 ]

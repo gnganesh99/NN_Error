@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
+from atomai.nets.blocks import ConvBlock as conv_block
+
 
 
         

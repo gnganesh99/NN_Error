@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 import os
 import random
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
 
 
 import numpy as np
@@ -46,6 +50,129 @@ def plot_error_prediction(error_mean, aq_fn, coordinates, ind, expt_name = 'test
         plt.savefig(img_path, bbox_inches = 'tight')    
     
     plt.show()  
+
+
+
+
+def plot_error_prediction_3d(
+    error_mean,
+    aq_fn,
+    coordinates,
+    ind,
+    expt_name="test_expt",
+    iter_nb=0,
+    save_folder=r"data",
+    to_save=False,
+    alpha_scale=True,
+):
+    """
+    3D version of plot_error_prediction.
+
+    Args:
+        error_mean : 1D array of length nx*ny*nz (flattened error values).
+        aq_fn      : 1D array of length nx*ny*nz (flattened acquisition values).
+        coordinates: Either (nx, ny, nz, 3) gridded coords, OR (N, 3) flat coords.
+                     `error_mean` and `aq_fn` must be in C-order matching
+                     `coordinates.reshape(-1, 3)`.
+        ind        : Index of the selected sample point (into the flat array).
+    """
+
+    coordinates = np.asarray(coordinates)
+
+    # ---------------------------------------------------------------
+    # 1. Get per-axis sizes from `coordinates` -- no cubic assumption.
+    # ---------------------------------------------------------------
+    if coordinates.ndim == 4:
+        nx, ny, nz, _ = coordinates.shape
+        coords_flat = coordinates.reshape(-1, 3)
+    elif coordinates.ndim == 2:
+        nx = len(np.unique(coordinates[:, 0]))
+        ny = len(np.unique(coordinates[:, 1]))
+        nz = len(np.unique(coordinates[:, 2]))
+        coords_flat = coordinates
+    else:
+        raise ValueError(
+            f"coordinates must be 2D (N, 3) or 4D (nx, ny, nz, 3), "
+            f"got shape {coordinates.shape}"
+        )
+
+    n_total = nx * ny * nz
+    if len(error_mean) != n_total or len(aq_fn) != n_total:
+        raise ValueError(
+            f"Length mismatch: coordinates imply {n_total} points "
+            f"(nx={nx}, ny={ny}, nz={nz}), but got "
+            f"error_mean of length {len(error_mean)} and "
+            f"aq_fn of length {len(aq_fn)}."
+        )
+
+    err_flat = np.asarray(error_mean).ravel()
+    aq_flat  = np.asarray(aq_fn).ravel()
+
+    xs = coords_flat[:, 0]
+    ys = coords_flat[:, 1]
+    zs = coords_flat[:, 2]
+
+    # ---------------------------------------------------------------
+    # 2. Helper: build per-point RGBA so alpha is baked into the color.
+    #    3D scatter chokes when you pass `alpha=` as an array, so we
+    #    sidestep that path entirely.
+    # ---------------------------------------------------------------
+    def values_to_rgba(values, cmap_name="viridis", vmin=None, vmax=None,
+                       min_alpha=0.05, max_alpha=0.9, use_alpha=True):
+        v = values.astype(float)
+        lo = v.min() if vmin is None else vmin
+        hi = v.max() if vmax is None else vmax
+        rng = hi - lo
+        norm = (v - lo) / rng if rng > 0 else np.zeros_like(v)
+        rgba = cm.get_cmap(cmap_name)(norm)
+        if use_alpha:
+            rgba[:, -1] = min_alpha + norm * (max_alpha - min_alpha)
+        return rgba, Normalize(vmin=lo, vmax=hi)
+
+    err_rgba, err_norm = values_to_rgba(err_flat, use_alpha=alpha_scale)
+    aq_rgba,  aq_norm  = values_to_rgba(aq_flat,  vmin=0, use_alpha=alpha_scale)
+
+    # ---------------------------------------------------------------
+    # 3. Two 3D scatter subplots.
+    # ---------------------------------------------------------------
+    fig = plt.figure(figsize=(12, 5))
+    ax0 = fig.add_subplot(1, 2, 1, projection="3d")
+    ax1 = fig.add_subplot(1, 2, 2, projection="3d")
+
+    # --- Error map ---
+    ax0.scatter(xs, ys, zs, c=err_rgba, s=20, edgecolors="none")
+    ax0.scatter(
+        xs[ind], ys[ind], zs[ind],
+        c="red", s=80, edgecolors="black", linewidths=1.0,
+        depthshade=False,
+    )
+    ax0.set_title("Error Map")
+    ax0.set_xlabel("x"); ax0.set_ylabel("y"); ax0.set_zlabel("z")
+    fig.colorbar(ScalarMappable(norm=err_norm, cmap="viridis"),
+                 ax=ax0, fraction=0.04, pad=0.08)
+
+    # --- Acquisition function ---
+    ax1.scatter(xs, ys, zs, c=aq_rgba, s=20, edgecolors="none")
+    ax1.set_title("Acquisition Function")
+    ax1.set_xlabel("x"); ax1.set_ylabel("y"); ax1.set_zlabel("z")
+    fig.colorbar(ScalarMappable(norm=aq_norm, cmap="viridis"),
+                 ax=ax1, fraction=0.04, pad=0.08)
+
+    plt.tight_layout()
+
+    # ---------------------------------------------------------------
+    # 4. Optional save.
+    # ---------------------------------------------------------------
+    if to_save:
+        img_name = "errormap_iter" + str(iter_nb) + ".jpg"
+        out_dir = os.path.join(save_folder, expt_name)
+        os.makedirs(out_dir, exist_ok=True)
+        img_path = os.path.join(out_dir, img_name)
+        plt.savefig(img_path, bbox_inches="tight")
+
+    plt.show()
+
+
 
 def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, error_val_loss):
     fig, ax = plt.subplots(1,4, figsize = (18,3))

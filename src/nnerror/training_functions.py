@@ -477,7 +477,8 @@ def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, 
 
 
 
-def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True, batchsize = None):
+def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True, 
+                batchsize = None):
 
     """
         if batchsize is provided, n_batches is disregarded
@@ -520,7 +521,7 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
     
     
 
-    for epoch in range(n_epochs):     
+    for epoch in tqdm(range(n_epochs)):     
 
 
 
@@ -530,6 +531,9 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
         
         # Training
         if partial_train:
+            if not hasattr(model, "train_only_decoder"):
+                raise AttributeError("Model does not have 'train_only_decoder' method. Set partial_train=False")
+            
             model.train_only_decoder()
         else:
             model.train()
