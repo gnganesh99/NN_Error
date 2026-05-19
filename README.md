@@ -57,18 +57,38 @@ Use this mode when the relevant image context may depend on spatial scale.
 
 The multiscale utilities create augmented versions of each image patch using different central-region scales:
 
-- `append_multiscale_data(..., append_image_type="pad")` keeps the image size fixed and zeros out image borders outside the selected central region.
-- `append_multiscale_data(..., append_image_type="interpolate")` crops the selected central region and resizes it back to the original image size.
+- `append_multiscale_data(..., append_image_type="pad")` keeps the image size fixed and zeros out image borders outside the selected central region. Recommended usage when using convolutional layers.
+- `append_multiscale_data(..., append_image_type="interpolate")` crops the selected central region and resizes it back to the original image size. Recommended usage when using neuraloperators.
 
 The chosen scale is appended to each coordinate vector, producing `(x, y, scale)` coordinates. This allows the same im2spec/error workflow to be applied across spatial context sizes. The plotting helper `plot_scale_slider` provides interactive scale-wise views of predicted error and acquisition values.
 
 ## Package Structure
 
-- `src/nnerror/networks/`: im2spec, FNO im2spec, ensemble, encoder wrapper, and decoder modules.
-- `src/nnerror/training_functions.py`: training loops, error estimation, prediction helpers, acquisition functions, and active-learning utilities.
-- `src/nnerror/plot_functions.py`: plotting utilities for training losses, spectra, latent spaces, error maps, 3D maps, and multiscale scale sliders.
-- `src/nnerror/utils/image_utils.py`: multiscale image augmentation helpers.
-- `notebooks/`: example workflows and notebook-local data loading helpers.
+```
+NN_Error/
+├── src/
+│   └── nnerror/
+│       ├── __init__.py
+│       ├── training_functions.py   # training loops, error estimation, prediction, acquisition functions
+│       ├── plot_functions.py       # loss, spectra, latent space, error map, and scale-slider plots
+│       ├── networks/
+│       │   ├── __init__.py
+│       │   ├── im2spec_models.py   # convolutional im2spec and ensemble wrapper models
+│       │   ├── neuralop_im2spec.py # FNO-based image-to-spectrum models
+│       │   └── nn_combiners.py     # encoder and decoder combiner modules
+│       └── utils/
+│           ├── __init__.py
+│           └── image_utils.py      # multiscale image augmentation helpers
+├── notebooks/                      # example workflows and notebook-local helpers
+│   ├── im2spec_dataset.py
+│   ├── stm_utils.py
+│   ├── BEPS_functions.py
+│   ├── CITS_Class.py
+│   └── data/                       # sample BEPS and STM datasets
+├── tests/
+├── requirements.txt
+└── LICENSE
+```
 
 ## Credits
 
