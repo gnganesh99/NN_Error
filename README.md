@@ -80,11 +80,22 @@ NN_Error/
 │           ├── __init__.py
 │           ├── image_utils.py      # multiscale image augmentation helpers
 │           └── im2spec_dataset.py  # PyTorch datasets and image/spectrum pairing helpers
-├── notebooks/                      # example workflows and notebook-local helpers
-│   ├── stm_utils.py
-│   ├── BEPS_functions.py
-│   ├── CITS_Class.py
-│   └── data/                       # sample BEPS and STM datasets
+├── notebooks/                      # example workflows grouped by microscopy modality
+│   ├── README.md
+│   ├── PFM/
+│   │   ├── BEPS_functions.py       # BEPS loading and image/spectrum pair extraction
+│   │   ├── test_im2spec_error.ipynb
+│   │   ├── test_fnoim2spec_error.ipynb
+│   │   ├── ensemble_im2spec_training.ipynb
+│   │   ├── multiscale_im2spec_error.ipynb
+│   │   └── data/
+│   │       └── BEPS_data/          # sample BEPS dataset
+│   └── STM/
+│       ├── stm_utils.py            # STM image loading and correction helpers
+│       ├── CITS_Class.py           # CITS spectroscopy loading helpers
+│       ├── stm_multiscale_im2spec_error.ipynb
+│       └── data/
+│           └── large_area/         # sample STM SXM and 3DS files
 ├── tests/
 ├── requirements.txt
 └── LICENSE
