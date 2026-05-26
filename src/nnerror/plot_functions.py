@@ -536,7 +536,6 @@ def plot_spectra(pred_spectra, orig_spectrum, error_val, expt_name = 'test_expt'
 
     plt.show()
 
-
 def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridis"):
     """
     Create an interactive slider for multiscale error/acquisition maps.
@@ -549,36 +548,114 @@ def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridi
             consistency; current plotting does not highlight it.
         colormap: Matplotlib colormap name.
     """
-    scales = np.unique(coordinates[:, 2])
 
-    # Fix color limits to the full-dataset range so colors are comparable across scales.
+    from ipywidgets import IntSlider, interact
+
+    scales = np.unique(coordinates[:, 2])
+    scales = np.array(sorted(scales), dtype=float)
+
     err_vmin, err_vmax = error_mean.min(), error_mean.max()
-    aq_vmin, aq_vmax   = 0, aq_fn.max()
+    aq_vmin, aq_vmax = 0, aq_fn.max()
 
     def _draw(scale):
-        """Draw error and acquisition maps for one selected scale."""
-        mask = coordinates[:, 2] == scale
+        mask = np.isclose(coordinates[:, 2], scale)
+
         xs, ys = coordinates[mask, 0], coordinates[mask, 1]
         err = error_mean[mask]
-        aq  = aq_fn[mask]
+        aq = aq_fn[mask]
 
         fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 5))
-        s0 = ax0.scatter(xs, ys, c=err, cmap=colormap, s=30,
-                         vmin=err_vmin, vmax=err_vmax)
+
+        s0 = ax0.scatter(
+            xs,
+            ys,
+            c=err,
+            cmap=colormap,
+            s=30,
+            vmin=err_vmin,
+            vmax=err_vmax,
+        )
         ax0.set_title(f"Error Map (scale={scale:g})")
-        ax0.set_xlabel("x"); ax0.set_ylabel("y")
+        ax0.set_xlabel("x")
+        ax0.set_ylabel("y")
         fig.colorbar(s0, ax=ax0, fraction=0.04)
 
-        s1 = ax1.scatter(xs, ys, c=aq, cmap=colormap, s=30,
-                         vmin=aq_vmin, vmax=aq_vmax)
+        s1 = ax1.scatter(
+            xs,
+            ys,
+            c=aq,
+            cmap=colormap,
+            s=30,
+            vmin=aq_vmin,
+            vmax=aq_vmax,
+        )
         ax1.set_title(f"Acquisition (scale={scale:g})")
-        ax1.set_xlabel("x"); ax1.set_ylabel("y")
+        ax1.set_xlabel("x")
+        ax1.set_ylabel("y")
         fig.colorbar(s1, ax=ax1, fraction=0.04)
 
         plt.tight_layout()
         plt.show()
 
-    # Use SelectionSlider since scales are discrete
-    from ipywidgets import SelectionSlider, interact
-    interact(_draw, scale=SelectionSlider(options=[float(s) for s in scales],
-                                          description="Scale"))
+    def _draw_by_index(scale_index):
+        scale = scales[int(scale_index)]
+        _draw(scale)
+
+    return interact(
+        _draw_by_index,
+        scale_index=IntSlider(
+            value=0,
+            min=0,
+            max=len(scales) - 1,
+            step=1,
+            description="Scale",
+            continuous_update=False,
+        ),
+    )
+
+
+# def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridis"):
+#     """
+#     Create an interactive slider for multiscale error/acquisition maps.
+
+#     Args:
+#         coordinates: Array of shape `(N, 3)` with columns `(x, y, scale)`.
+#         error_mean: Flat array of predicted error values, shape `(N,)`.
+#         aq_fn: Flat array of acquisition values, shape `(N,)`.
+#         ind: Optional selected candidate index or indices. Retained for API
+#             consistency; current plotting does not highlight it.
+#         colormap: Matplotlib colormap name.
+#     """
+#     scales = np.unique(coordinates[:, 2])
+
+#     # Fix color limits to the full-dataset range so colors are comparable across scales.
+#     err_vmin, err_vmax = error_mean.min(), error_mean.max()
+#     aq_vmin, aq_vmax   = 0, aq_fn.max()
+
+#     def _draw(scale):
+#         """Draw error and acquisition maps for one selected scale."""
+#         mask = coordinates[:, 2] == scale
+#         xs, ys = coordinates[mask, 0], coordinates[mask, 1]
+#         err = error_mean[mask]
+#         aq  = aq_fn[mask]
+
+#         fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 5))
+#         s0 = ax0.scatter(xs, ys, c=err, cmap=colormap, s=30,
+#                          vmin=err_vmin, vmax=err_vmax)
+#         ax0.set_title(f"Error Map (scale={scale:g})")
+#         ax0.set_xlabel("x"); ax0.set_ylabel("y")
+#         fig.colorbar(s0, ax=ax0, fraction=0.04)
+
+#         s1 = ax1.scatter(xs, ys, c=aq, cmap=colormap, s=30,
+#                          vmin=aq_vmin, vmax=aq_vmax)
+#         ax1.set_title(f"Acquisition (scale={scale:g})")
+#         ax1.set_xlabel("x"); ax1.set_ylabel("y")
+#         fig.colorbar(s1, ax=ax1, fraction=0.04)
+
+#         plt.tight_layout()
+#         plt.show()
+
+#     # Use SelectionSlider since scales are discrete
+#     from ipywidgets import SelectionSlider, interact
+#     interact(_draw, scale=SelectionSlider(options=[float(s) for s in scales],
+#                                           description="Scale"))
