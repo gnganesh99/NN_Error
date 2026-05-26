@@ -15,3 +15,7 @@ src/nnerror/networks/neuralop_im2spec.py
 src/nnerror/networks/nn_combiners.py
 src/nnerror/utils/__init__.py
 src/nnerror/utils/image_utils.py
+tests/test_imports.py
+tests/test_models.py
+tests/test_training_functions.py
+tests/test_utils.py
