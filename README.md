@@ -4,6 +4,8 @@ Neural-network error estimation tools for image-to-spectroscopy (`im2spec`) lear
 
 This package supports workflows where a neural network first learns a structure-property correlation from image patches to local spectra, then a second neural-network error model estimates where the im2spec model is likely to be unreliable. Those predicted errors can be converted into acquisition functions for active learning, allowing the next measurements or labels to be selected from regions that are informative for improving the model.
 
+
+
 ## Overall Workflow
 
 The central workflow has three stages:
