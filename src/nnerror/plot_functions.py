@@ -217,32 +217,32 @@ def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, e
     n_models = len(im2spec_train_loss)
 
     for i in range(n_models):
-        ax[0].semilogy(im2spec_train_loss[i], label = 'im2spec Training loss')
-        ax[1].semilogy(im2spec_val_loss[i], label = 'im2spec Validation loss')
+        ax[0].semilogy(im2spec_train_loss[i], label = f'im2spec Training loss {i+1}')
+        ax[1].semilogy(im2spec_val_loss[i], label = f'im2spec Validation loss {i+1}')
 
 
 
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
-    ax[0].legend(fontsize=8)
+    ax[0].legend(fontsize=8, loc='best')
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
-    ax[1].legend(fontsize=8)
+    ax[1].legend(fontsize=8, loc='best')
 
     ax[2].semilogy(error_train_loss, label = 'error Training loss')
     ax[2].set_xlabel("Epochs")
     ax[2].set_ylabel("Epoch loss")
     ax[2].set_title("error model training")
-    ax[2].legend(fontsize=8)
+    ax[2].legend(fontsize=8, loc='best')
 
     ax[3].semilogy(error_val_loss, label = 'Error Validation loss')
     ax[3].set_xlabel("Epochs")
     ax[3].set_ylabel("Epoch loss")
     ax[3].set_title("Error model Validation")
-    ax[3].legend(fontsize=8)
+    ax[3].legend(fontsize=8, loc='best')
 
     
 
@@ -264,20 +264,20 @@ def plot_only_training_loss(im2spec_train_loss, im2spec_val_loss):
     n_models = len(im2spec_train_loss)
 
     for i in range(n_models):
-        ax[0].semilogy(im2spec_train_loss[i], label = 'im2spec Training loss')
-        ax[1].semilogy(im2spec_val_loss[i], label = 'im2spec Validation loss')
+        ax[0].semilogy(im2spec_train_loss[i], label = f'im2spec Training loss {i+1}')
+        ax[1].semilogy(im2spec_val_loss[i], label = f'im2spec Validation loss {i+1}')
 
 
 
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
-    ax[0].legend(fontsize=8)
+    ax[0].legend(fontsize=8, loc='best')
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
-    ax[1].legend(fontsize=8)
+    ax[1].legend(fontsize=8, loc='best')
 
 
     plt.show()
@@ -473,6 +473,7 @@ def cluster_latent_space(embeddings, lat_order = [0, 1, 2],  n_clusters = 2):
                color=colors[i], label=f'Cluster {i}', alpha=0.6, edgecolors='k')
 
     ax.set_title('Latent space, scale = {scale}')
+    ax.legend(fontsize=8, loc='best')
 
 #     # Remove axis numbers (ticks)
 #     ax.set_xticks([])
@@ -530,7 +531,7 @@ def plot_spectra(pred_spectra, orig_spectrum, error_val, expt_name = 'test_expt'
 
     for spectrum in pred_spectra:
         ax.plot(x, spectrum, linewidth = 3, label = f'Predicted\n{error_type}-error: {error_val:.4f}')
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=10, loc='best')
 
     if to_save:
         img_name = "spectrum_iter"+str(iter_nb)+'_sample'+str(count)+'.jpg'
