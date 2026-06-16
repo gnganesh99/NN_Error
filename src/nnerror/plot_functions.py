@@ -240,7 +240,7 @@ def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, e
     ax[3].set_ylabel("Epoch loss")
     ax[3].set_title("Error model Validation")
 
-    plt.legend(fontsize=10)
+    ax.legend(fontsize=10)
 
     plt.show()
 
