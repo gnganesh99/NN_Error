@@ -523,7 +523,7 @@ def plot_spectra(pred_spectra, orig_spectrum, error_val, expt_name = 'test_expt'
 
 
     for spectrum in pred_spectra:
-        ax.plot(x, spectrum, linewidth = 3, label = f'Predicted\nL1-error: {error_val:.4f}')
+        ax.plot(x, spectrum, linewidth = 3, label = f'Predicted\n{error_type}-error: {error_val:.4f}')
     ax.legend(fontsize=10)
 
     if to_save:
