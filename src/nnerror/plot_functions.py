@@ -225,22 +225,26 @@ def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, e
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
+    ax[0].legend(fontsize=8)
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
+    ax[1].legend(fontsize=8)
 
     ax[2].semilogy(error_train_loss, label = 'error Training loss')
     ax[2].set_xlabel("Epochs")
     ax[2].set_ylabel("Epoch loss")
     ax[2].set_title("error model training")
+    ax[2].legend(fontsize=8)
 
     ax[3].semilogy(error_val_loss, label = 'Error Validation loss')
     ax[3].set_xlabel("Epochs")
     ax[3].set_ylabel("Epoch loss")
     ax[3].set_title("Error model Validation")
+    ax[3].legend(fontsize=8)
 
-    ax.legend(fontsize=10)
+    
 
     plt.show()
 
@@ -268,10 +272,12 @@ def plot_only_training_loss(im2spec_train_loss, im2spec_val_loss):
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
+    ax[0].legend(fontsize=8)
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
+    ax[1].legend(fontsize=8)
 
 
     plt.show()
