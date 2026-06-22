@@ -24,37 +24,194 @@ def norm_0to1(arr):
     return arr
 
 
-# def train_model(model, imgs_train, spectra_train, n_epochs = 100):
-
-#     criterion = nn.MSELoss()
-#     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-#     n_epochs = 100
-
-#     train_loss = []
-
-#     model.train()
-
-#     train_images = torch.tensor(imgs_train, dtype=torch.float32)
-#     train_spectra = torch.tensor(spectra_train, dtype=torch.float32)
-
-
-#     for epoch in range(n_epochs):
-
-#         optimizer.zero_grad()
-#         outputs = model(train_images)
-#         loss = criterion(outputs, train_spectra)
-
-#         loss.backward()
-#         optimizer.step()
-
-#         train_loss.append(loss.item())
-
-
-#     model.eval()
-
-#     return model, train_loss
-
+# Model training function with swa updates
+  
+def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True,
+                batchsize = None, val_dataset =  None, use_swa = False, last_swa_epochs = 0.1):
+ 
+    """
+    Train a model with optional encoder freezing, early stopping, and a
+    live tqdm progress bar showing per-epoch train and validation loss.
+ 
+    Args:
+        model: nn.Module to train. If `partial_train=True`, the model must
+            implement a `train_only_decoder()` method.
+        dataset: Training dataset. If `val_dataset` is None, this is split
+            80/20 into train/val internally.
+        n_batches: Number of batches per epoch. Used to derive batch size
+            as `len(train_dataset) // n_batches` (and likewise for val).
+            Ignored if `batchsize` is provided. Default 3.
+        lr: Learning rate for the Adam optimizer. Default 0.1.
+        patience: Number of epochs without val-loss improvement to wait
+            before early stopping. Default 10.
+        n_epochs: Maximum number of training epochs. Default 100.
+        partial_train: If True, only the decoder is trained (encoder
+            frozen) via `model.train_only_decoder()`. If False, the full
+            model is trained via `model.train()`. Default True.
+        batchsize: Explicit batch size. If provided, `n_batches` is
+            ignored and this value is used for both train and val
+            DataLoaders. Default None.
+        val_dataset: Optional separate validation dataset. If None, the
+            training `dataset` is split 80/20 into train/val. Default None.
+        use_swa: If True, use Stochastic Weight Averaging during the final portion
+            of training. Default False.
+        last_swa_epochs: If `use_swa=True`, the final portion of training during which SWA
+            updates are applied. If >1, this is interpreted as a number of epochs;
+            if <=1, this is interpreted as a fraction of `n_epochs`. Default 0.1 (10% of training).
+    Returns:
+        Tuple of (model, train_loss, val_loss) where:
+            model: The trained model, set to eval mode. If `use_swa=True`
+                and SWA was triggered, this is the original model object with
+                the SWA-averaged weights copied into it.
+            train_loss: List of per-epoch average training losses.
+            val_loss: List of per-epoch average validation losses.
+ 
+    Raises:
+        AttributeError: If `partial_train=True` and the model does not
+            implement a `train_only_decoder` method.
+ 
+    Notes:
+        - Uses MSELoss and the Adam optimizer.
+        - Validation uses `model.predict(...)` rather than `model(...)`.
+        - Early stopping starts after `skip_epochs=100` epochs.
+    """
+ 
+ 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+ 
+    criterion = nn.MSELoss()
+ 
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+ 
+    train_loss = []
+    val_loss = []
+ 
+    swa_triggered = False
+    swa_model = None
+    swa_sclr = None  # Swa scheduler to tune the optimizer learning rate during swa phase. This creates stability in model updates.
+    if use_swa:
+        swa_model = AveragedModel(model)
+        swa_sclr = SWALR(optimizer, swa_lr = lr*0.1, anneal_epochs = 15, anneal_strategy = "cos")
+ 
+        if last_swa_epochs > 1:
+            swa_epoch = max(0, n_epochs - last_swa_epochs)
+        else:
+            swa_epoch = int(n_epochs * (1 - last_swa_epochs))
+ 
+ 
+    if val_dataset is not None:
+ 
+        train_size = len(dataset)
+        val_size = len(val_dataset)
+ 
+        train_dataset = dataset
+        val_dataset = val_dataset
+ 
+    else:
+        train_size = int(0.8*len(dataset))
+        val_size = len(dataset) - train_size
+ 
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+ 
+    #Keep batchsize atleast 1
+    train_batch_size = max(1, len(train_dataset)//n_batches)
+    val_batch_size = max(1, len(val_dataset)//n_batches)
+ 
+    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
+    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+ 
+    #if batchsize provided disregard n_batches
+    if batchsize is not None:
+        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
+ 
+ 
+    earlystopping = EarlyStopping(skip_epochs = 100, patience = patience, min_delta = 0)
+ 
+ 
+    pbar = tqdm(range(n_epochs))
+ 
+    for epoch in pbar:
+ 
+ 
+ 
+        tr_epoch_loss = 0
+        val_epoch_loss = 0
+ 
+ 
+        # Training
+        if partial_train:
+            if not hasattr(model, "train_only_decoder"):
+                raise AttributeError("Model does not have 'train_only_decoder' method. Set partial_train=False")
+ 
+            model.train_only_decoder()
+        else:
+            model.train()
+ 
+        for train_images, train_label in tr_dataloader:
+ 
+            train_images, train_label = train_images.to(device), train_label.to(device)
+ 
+            optimizer.zero_grad()
+ 
+            output = model(train_images)
+ 
+            loss = criterion(output, train_label)
+            tr_epoch_loss += loss.item()
+ 
+            loss.backward()
+            optimizer.step()
+ 
+        if swa_triggered:
+            swa_sclr.step()
+ 
+        tr_epoch_loss /= len(tr_dataloader)
+ 
+        train_loss.append(tr_epoch_loss)
+ 
+ 
+ 
+        model.eval()
+ 
+        with torch.no_grad():
+            for val_images, val_label in val_dataloader:
+           
+                val_images, val_label = val_images.to(device), val_label.to(device)
+ 
+                output = model.predict(val_images)
+ 
+                loss = criterion(output, val_label)
+ 
+                val_epoch_loss += loss.item()
+ 
+        val_epoch_loss /= len(val_dataloader)
+ 
+ 
+        val_loss.append(val_epoch_loss)
+ 
+ 
+ 
+        if use_swa and epoch >= swa_epoch:
+            if not swa_triggered:                
+                print(f"SWA triggered at epoch {epoch}")
+                swa_triggered = True
+            swa_model.update_parameters(model)
+ 
+        pbar.set_postfix(train_loss=f"{tr_epoch_loss:.4f}", val_loss=f"{val_epoch_loss:.4f}")
+ 
+        if earlystopping(val_epoch_loss, epoch):
+            break
+ 
+ 
+    if use_swa and swa_triggered:
+        torch.optim.swa_utils.update_bn(tr_dataloader, swa_model, device = device)
+        model.load_state_dict(swa_model.module.state_dict())
+ 
+    model.eval()
+ 
+    return model, train_loss, val_loss
+ 
 
 def l1_regularization(model, l1_lambda = 1e-4): # l1_lambda : regularization_strength
     """
