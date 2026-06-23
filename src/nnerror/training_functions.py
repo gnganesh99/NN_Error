@@ -596,7 +596,7 @@ def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, 
 
 
 def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True,
-                batchsize = None, val_dataset =  None):
+                batchsize = None, val_dataset =  None, use_swa = False, last_swa_epochs = 0.1):
 
     """
     Train a model with optional encoder freezing, early stopping, and a
@@ -622,10 +622,16 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
             DataLoaders. Default None.
         val_dataset: Optional separate validation dataset. If None, the
             training `dataset` is split 80/20 into train/val. Default None.
-
+        use_swa: If True, use Stochastic Weight Averaging during the final portion
+            of training. Default False.
+        last_swa_epochs: If `use_swa=True`, the final portion of training during which SWA 
+            updates are applied. If >1, this is interpreted as a number of epochs; 
+            if <=1, this is interpreted as a fraction of `n_epochs`. Default 0.1 (last 10% of training).
     Returns:
         Tuple of (model, train_loss, val_loss) where:
-            model: The trained model, set to eval mode.
+            model: The trained model, set to eval mode. If `use_swa=True`
+                and SWA was triggered, this is the original model object with
+                the SWA-averaged weights copied into it.
             train_loss: List of per-epoch average training losses.
             val_loss: List of per-epoch average validation losses.
 
@@ -650,6 +656,17 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
     train_loss = []
     val_loss = []
 
+    swa_triggered = False
+    swa_model = None
+    swa_sclr = None  # Swa scheduler to tune the optimizer learning rate during swa phase. This creates stability in model updates.
+    if use_swa:
+        swa_model = AveragedModel(model)
+        swa_sclr = SWALR(optimizer, swa_lr = lr*0.1, anneal_epochs = 15, anneal_strategy = "cos")
+
+        if last_swa_epochs > 1: 
+            swa_epoch = max(0, n_epochs - last_swa_epochs)
+        else:
+            swa_epoch = int(n_epochs * (1 - last_swa_epochs))
 
 
     if val_dataset is not None:
@@ -715,31 +732,40 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
             loss.backward()
             optimizer.step()
 
+        if swa_triggered:
+            swa_sclr.step()
+
         tr_epoch_loss /= len(tr_dataloader)
 
         train_loss.append(tr_epoch_loss)
 
-        # Validation
+
 
         model.eval()
 
-        for val_images, val_label in val_dataloader:
+        with torch.no_grad():
+            for val_images, val_label in val_dataloader:
+            
+                val_images, val_label = val_images.to(device), val_label.to(device)
 
-            val_images, val_label = val_images.to(device), val_label.to(device)
+                output = model.predict(val_images)
 
+                loss = criterion(output, val_label)
 
-            output = model.predict(val_images)
-
-            loss = criterion(output, val_label)
-
-
-
-            val_epoch_loss += loss.item()
+                val_epoch_loss += loss.item()
 
         val_epoch_loss /= len(val_dataloader)
 
 
         val_loss.append(val_epoch_loss)
+
+
+
+        if use_swa and epoch >= swa_epoch:
+            if not swa_triggered:                
+                print(f"SWA triggered at epoch {epoch}")
+                swa_triggered = True
+            swa_model.update_parameters(model)
 
         pbar.set_postfix(train_loss=f"{tr_epoch_loss:.4f}", val_loss=f"{val_epoch_loss:.4f}")
 
@@ -747,7 +773,9 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
             break
 
 
-
+    if use_swa and swa_triggered:
+        torch.optim.swa_utils.update_bn(tr_dataloader, swa_model, device = device)
+        model.load_state_dict(swa_model.module.state_dict())
 
     model.eval()
 
