@@ -9,6 +9,13 @@ from .plot_functions import (
 	plot_scale_slider,
 	plot_spectra,
 	plot_training_loss,
+	visualize_attention,
+)
+from .networks import (
+	Attn_Block,
+	FNO_im2spec_attn,
+	attn_im2spec,
+	im2spec_attn,
 )
 from .training_functions import (
 	ELBOLoss,
@@ -61,6 +68,11 @@ __all__ = [
 	"plot_scale_slider",
 	"plot_spectra",
 	"plot_training_loss",
+	"visualize_attention",
+	"Attn_Block",
+	"FNO_im2spec_attn",
+	"attn_im2spec",
+	"im2spec_attn",
 	"ELBOLoss",
 	"EarlyStopping",
 	"EarlyStopping_ensemble",

@@ -217,34 +217,29 @@ def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, e
     n_models = len(im2spec_train_loss)
 
     for i in range(n_models):
-        ax[0].semilogy(im2spec_train_loss[i], label = f'im2spec Training loss {i+1}')
-        ax[1].semilogy(im2spec_val_loss[i], label = f'im2spec Validation loss {i+1}')
+        ax[0].semilogy(im2spec_train_loss[i], label = 'im2spec Training loss')
+        ax[1].semilogy(im2spec_val_loss[i], label = 'im2spec Validation loss')
 
 
 
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
-    ax[0].legend(fontsize=8, loc='best')
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
-    ax[1].legend(fontsize=8, loc='best')
 
     ax[2].semilogy(error_train_loss, label = 'error Training loss')
     ax[2].set_xlabel("Epochs")
     ax[2].set_ylabel("Epoch loss")
     ax[2].set_title("error model training")
-    ax[2].legend(fontsize=8, loc='best')
 
     ax[3].semilogy(error_val_loss, label = 'Error Validation loss')
     ax[3].set_xlabel("Epochs")
     ax[3].set_ylabel("Epoch loss")
     ax[3].set_title("Error model Validation")
-    ax[3].legend(fontsize=8, loc='best')
 
-    
 
     plt.show()
 
@@ -264,20 +259,18 @@ def plot_only_training_loss(im2spec_train_loss, im2spec_val_loss):
     n_models = len(im2spec_train_loss)
 
     for i in range(n_models):
-        ax[0].semilogy(im2spec_train_loss[i], label = f'im2spec Training loss {i+1}')
-        ax[1].semilogy(im2spec_val_loss[i], label = f'im2spec Validation loss {i+1}')
+        ax[0].semilogy(im2spec_train_loss[i], label = 'im2spec Training loss')
+        ax[1].semilogy(im2spec_val_loss[i], label = 'im2spec Validation loss')
 
 
 
     ax[0].set_xlabel("Epochs")
     ax[0].set_ylabel("Epoch loss")
     ax[0].set_title("im2spec training")
-    ax[0].legend(fontsize=8, loc='best')
 
     ax[1].set_xlabel("Epochs")
     ax[1].set_ylabel("Epoch loss")
     ax[1].set_title("im2spec Validation")
-    ax[1].legend(fontsize=8, loc='best')
 
 
     plt.show()
@@ -350,7 +343,7 @@ def plot_latent_space(embeddings, trained_embeddings = None, expt_name = 'test_e
     ax.scatter(l1, l2, l3, alpha=0.2)  # edgecolors='#1f77b4
 
 
-    ax.set_title(f'Latent space, scale = {scale}')
+    ax.set_title('Latent space')
 
 #     # Remove axis numbers (ticks)
 #     ax.set_xticks([])
@@ -472,8 +465,7 @@ def cluster_latent_space(embeddings, lat_order = [0, 1, 2],  n_clusters = 2):
         ax.scatter(embeddings[labels == i,lat_order[0]], embeddings[labels == i, lat_order[1]], embeddings[labels == i, lat_order[2]],
                color=colors[i], label=f'Cluster {i}', alpha=0.6, edgecolors='k')
 
-    ax.set_title('Latent space, scale = {scale}')
-    ax.legend(fontsize=8, loc='best')
+    ax.set_title('Latent space')
 
 #     # Remove axis numbers (ticks)
 #     ax.set_xticks([])
@@ -530,8 +522,8 @@ def plot_spectra(pred_spectra, orig_spectrum, error_val, expt_name = 'test_expt'
 
 
     for spectrum in pred_spectra:
-        ax.plot(x, spectrum, linewidth = 3, label = f'Predicted\n L1 error: {error_val:.4f}')
-    ax.legend(fontsize=10, loc='best')
+        ax.plot(x, spectrum, linewidth = 3, label = f'Predicted\nL1-error: {error_val:.4f}')
+    ax.legend(fontsize=10)
 
     if to_save:
         img_name = "spectrum_iter"+str(iter_nb)+'_sample'+str(count)+'.jpg'
@@ -620,6 +612,110 @@ def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridi
             continuous_update=False,
         ),
     )
+
+
+def visualize_attention(
+    model,
+    images,
+    spectra,
+    full_image,
+    coordinates,
+    index=0,
+    device=None,
+    colormap="viridis",
+    figsize=(20, 4),
+):
+    """
+    Visualize one image-to-spectrum sample and its attention matrix.
+
+    Args:
+        model: Trained attention model exposing `predict` and `get_attn_weights`.
+        images: Image patches with shape `(N, H, W)`.
+        spectra: Target spectra with shape `(N, S)`.
+        full_image: Full 2D image used for spatial context.
+        coordinates: Array with at least `(x, y)` columns. A third column is
+            shown as scale when present.
+        index: Dataset index to visualize.
+        device: Optional torch device for model inference. If omitted, the
+            model parameter device is used.
+        colormap: Matplotlib colormap for the attention matrix.
+        figsize: Matplotlib figure size.
+
+    Returns:
+        Tuple `(fig, ax, attn_matrix)` for further customization.
+    """
+    import torch
+
+    if not hasattr(model, "get_attn_weights"):
+        raise AttributeError("Model must expose a get_attn_weights() method.")
+
+    images = np.asarray(images)
+    spectra = np.asarray(spectra)
+    coordinates = np.asarray(coordinates)
+
+    index = int(np.clip(index, 0, len(images) - 1))
+
+    if device is None:
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+
+    model.eval()
+    with torch.no_grad():
+        sample_image = torch.tensor(
+            images[index:index + 1], dtype=torch.float32, device=device
+        )
+        pred_spectrum = model.predict(sample_image).detach().cpu().squeeze().numpy()
+        attn_matrix = model.get_attn_weights()
+
+    if attn_matrix is None:
+        raise RuntimeError(
+            "No attention weights found. Run the model on an input before visualizing."
+        )
+
+    if hasattr(attn_matrix, "detach"):
+        attn_matrix = attn_matrix.detach().cpu().numpy()
+    else:
+        attn_matrix = np.asarray(attn_matrix)
+
+    if attn_matrix.ndim == 4:
+        attn_matrix = attn_matrix[0].mean(axis=0)
+    elif attn_matrix.ndim == 3:
+        attn_matrix = attn_matrix[0]
+
+    coord = coordinates[index]
+    x_coord, y_coord = coord[0], coord[1]
+    scale = coord[2] if len(coord) > 2 else None
+
+    fig, ax = plt.subplots(1, 4, figsize=figsize)
+
+    ax[0].imshow(full_image, origin="lower")
+    ax[0].scatter(x_coord, y_coord, c="red", s=40)
+    title = f"Dataset index {index}"
+    if scale is not None:
+        title += f" | scale={scale:g}"
+    ax[0].set_title(title)
+
+    patch_im = ax[1].imshow(images[index], origin="lower")
+    ax[1].set_title("Patch image")
+    fig.colorbar(patch_im, ax=ax[1], fraction=0.046, pad=0.04)
+
+    ax[2].plot(spectra[index], label="Target")
+    ax[2].plot(pred_spectrum, label="Prediction")
+    ax[2].set_title("Spectra")
+    ax[2].legend()
+
+    attn_im = ax[3].imshow(attn_matrix, cmap=colormap, aspect="auto")
+    ax[3].set_title("Attention matrix")
+    ax[3].set_xlabel("Key token")
+    ax[3].set_ylabel("Query token")
+    fig.colorbar(attn_im, ax=ax[3], fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax, attn_matrix
 
 
 # def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridis"):
