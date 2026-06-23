@@ -121,29 +121,6 @@ class FNOEncoder(nn.Module):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class FNO_im2spec(nn.Module):
     """
     im2spec-style encoder-decoder with an FNO encoder.
