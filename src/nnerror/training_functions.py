@@ -775,7 +775,8 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
 
     if use_swa and swa_triggered:
         torch.optim.swa_utils.update_bn(tr_dataloader, swa_model, device = device)
-        model.load_state_dict(swa_model.module.state_dict())
+        model = swa_model.module
+        #model.load_state_dict(swa_model.module.state_dict())
 
     model.eval()
 
