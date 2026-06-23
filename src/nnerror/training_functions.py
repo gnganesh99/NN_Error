@@ -26,8 +26,8 @@ def norm_0to1(arr):
 
 # Model training function with swa updates
   
-def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True,
-                batchsize = None, val_dataset =  None, use_swa = True, last_swa_epochs = 0.1):
+def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = False,
+                batchsize = None, use_swa = True, last_swa_epochs = 0.1):
  
     """
     Train a model with optional encoder freezing, early stopping, and a
