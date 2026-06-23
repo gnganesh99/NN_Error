@@ -614,6 +614,110 @@ def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridi
     )
 
 
+def visualize_attention(
+    model,
+    images,
+    spectra,
+    full_image,
+    coordinates,
+    index=0,
+    device=None,
+    colormap="viridis",
+    figsize=(20, 4),
+):
+    """
+    Visualize one image-to-spectrum sample and its attention matrix.
+
+    Args:
+        model: Trained attention model exposing `predict` and `get_attn_weights`.
+        images: Image patches with shape `(N, H, W)`.
+        spectra: Target spectra with shape `(N, S)`.
+        full_image: Full 2D image used for spatial context.
+        coordinates: Array with at least `(x, y)` columns. A third column is
+            shown as scale when present.
+        index: Dataset index to visualize.
+        device: Optional torch device for model inference. If omitted, the
+            model parameter device is used.
+        colormap: Matplotlib colormap for the attention matrix.
+        figsize: Matplotlib figure size.
+
+    Returns:
+        Tuple `(fig, ax, attn_matrix)` for further customization.
+    """
+    import torch
+
+    if not hasattr(model, "get_attn_weights"):
+        raise AttributeError("Model must expose a get_attn_weights() method.")
+
+    images = np.asarray(images)
+    spectra = np.asarray(spectra)
+    coordinates = np.asarray(coordinates)
+
+    index = int(np.clip(index, 0, len(images) - 1))
+
+    if device is None:
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+
+    model.eval()
+    with torch.no_grad():
+        sample_image = torch.tensor(
+            images[index:index + 1], dtype=torch.float32, device=device
+        )
+        pred_spectrum = model.predict(sample_image).detach().cpu().squeeze().numpy()
+        attn_matrix = model.get_attn_weights()
+
+    if attn_matrix is None:
+        raise RuntimeError(
+            "No attention weights found. Run the model on an input before visualizing."
+        )
+
+    if hasattr(attn_matrix, "detach"):
+        attn_matrix = attn_matrix.detach().cpu().numpy()
+    else:
+        attn_matrix = np.asarray(attn_matrix)
+
+    if attn_matrix.ndim == 4:
+        attn_matrix = attn_matrix[0].mean(axis=0)
+    elif attn_matrix.ndim == 3:
+        attn_matrix = attn_matrix[0]
+
+    coord = coordinates[index]
+    x_coord, y_coord = coord[0], coord[1]
+    scale = coord[2] if len(coord) > 2 else None
+
+    fig, ax = plt.subplots(1, 4, figsize=figsize)
+
+    ax[0].imshow(full_image, origin="lower")
+    ax[0].scatter(x_coord, y_coord, c="red", s=40)
+    title = f"Dataset index {index}"
+    if scale is not None:
+        title += f" | scale={scale:g}"
+    ax[0].set_title(title)
+
+    patch_im = ax[1].imshow(images[index], origin="lower")
+    ax[1].set_title("Patch image")
+    fig.colorbar(patch_im, ax=ax[1], fraction=0.046, pad=0.04)
+
+    ax[2].plot(spectra[index], label="Target")
+    ax[2].plot(pred_spectrum, label="Prediction")
+    ax[2].set_title("Spectra")
+    ax[2].legend()
+
+    attn_im = ax[3].imshow(attn_matrix, cmap=colormap, aspect="auto")
+    ax[3].set_title("Attention matrix")
+    ax[3].set_xlabel("Key token")
+    ax[3].set_ylabel("Query token")
+    fig.colorbar(attn_im, ax=ax[3], fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax, attn_matrix
+
+
 # def plot_scale_slider(coordinates, error_mean, aq_fn, ind=None, colormap="viridis"):
 #     """
 #     Create an interactive slider for multiscale error/acquisition maps.

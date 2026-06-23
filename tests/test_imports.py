@@ -102,6 +102,7 @@ def test_plot_functions():
         plot_scale_slider,
         plot_spectra,
         plot_training_loss,
+        visualize_attention,
     )
 
 
