@@ -206,7 +206,8 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
  
     if use_swa and swa_triggered:
         torch.optim.swa_utils.update_bn(tr_dataloader, swa_model, device = device)
-        model.load_state_dict(swa_model.module.state_dict())
+        model =  swa_model.module
+        #model.load_state_dict(swa_model.module.state_dict())
  
     model.eval()
  
@@ -752,163 +753,163 @@ def train_error_ensemble(model, dataset, n_batches= 3, lr = 0.1, patience = 10, 
 
 
 
-def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True,
-                batchsize = None, val_dataset =  None):
+# def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs = 100, partial_train = True,
+#                 batchsize = None, val_dataset =  None):
 
-    """
-    Train a model with optional encoder freezing, early stopping, and a
-    live tqdm progress bar showing per-epoch train and validation loss.
+#     """
+#     Train a model with optional encoder freezing, early stopping, and a
+#     live tqdm progress bar showing per-epoch train and validation loss.
 
-    Args:
-        model: nn.Module to train. If `partial_train=True`, the model must
-            implement a `train_only_decoder()` method.
-        dataset: Training dataset. If `val_dataset` is None, this is split
-            80/20 into train/val internally.
-        n_batches: Number of batches per epoch. Used to derive batch size
-            as `len(train_dataset) // n_batches` (and likewise for val).
-            Ignored if `batchsize` is provided. Default 3.
-        lr: Learning rate for the Adam optimizer. Default 0.1.
-        patience: Number of epochs without val-loss improvement to wait
-            before early stopping. Default 10.
-        n_epochs: Maximum number of training epochs. Default 100.
-        partial_train: If True, only the decoder is trained (encoder
-            frozen) via `model.train_only_decoder()`. If False, the full
-            model is trained via `model.train()`. Default True.
-        batchsize: Explicit batch size. If provided, `n_batches` is
-            ignored and this value is used for both train and val
-            DataLoaders. Default None.
-        val_dataset: Optional separate validation dataset. If None, the
-            training `dataset` is split 80/20 into train/val. Default None.
+#     Args:
+#         model: nn.Module to train. If `partial_train=True`, the model must
+#             implement a `train_only_decoder()` method.
+#         dataset: Training dataset. If `val_dataset` is None, this is split
+#             80/20 into train/val internally.
+#         n_batches: Number of batches per epoch. Used to derive batch size
+#             as `len(train_dataset) // n_batches` (and likewise for val).
+#             Ignored if `batchsize` is provided. Default 3.
+#         lr: Learning rate for the Adam optimizer. Default 0.1.
+#         patience: Number of epochs without val-loss improvement to wait
+#             before early stopping. Default 10.
+#         n_epochs: Maximum number of training epochs. Default 100.
+#         partial_train: If True, only the decoder is trained (encoder
+#             frozen) via `model.train_only_decoder()`. If False, the full
+#             model is trained via `model.train()`. Default True.
+#         batchsize: Explicit batch size. If provided, `n_batches` is
+#             ignored and this value is used for both train and val
+#             DataLoaders. Default None.
+#         val_dataset: Optional separate validation dataset. If None, the
+#             training `dataset` is split 80/20 into train/val. Default None.
 
-    Returns:
-        Tuple of (model, train_loss, val_loss) where:
-            model: The trained model, set to eval mode.
-            train_loss: List of per-epoch average training losses.
-            val_loss: List of per-epoch average validation losses.
+#     Returns:
+#         Tuple of (model, train_loss, val_loss) where:
+#             model: The trained model, set to eval mode.
+#             train_loss: List of per-epoch average training losses.
+#             val_loss: List of per-epoch average validation losses.
 
-    Raises:
-        AttributeError: If `partial_train=True` and the model does not
-            implement a `train_only_decoder` method.
+#     Raises:
+#         AttributeError: If `partial_train=True` and the model does not
+#             implement a `train_only_decoder` method.
 
-    Notes:
-        - Uses MSELoss and the Adam optimizer.
-        - Validation uses `model.predict(...)` rather than `model(...)`.
-        - Early stopping starts after `skip_epochs=100` epochs.
-    """
-
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-
-    criterion = nn.MSELoss()
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    train_loss = []
-    val_loss = []
+#     Notes:
+#         - Uses MSELoss and the Adam optimizer.
+#         - Validation uses `model.predict(...)` rather than `model(...)`.
+#         - Early stopping starts after `skip_epochs=100` epochs.
+#     """
 
 
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model.to(device)
 
-    if val_dataset is not None:
+#     criterion = nn.MSELoss()
 
-        train_size = len(dataset)
-        val_size = len(val_dataset)
+#     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        train_dataset = dataset
-        val_dataset = val_dataset
-
-    else:
-        train_size = int(0.8*len(dataset))
-        val_size = len(dataset) - train_size
-
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
-    #Keep batchsize atleast 1
-    train_batch_size = max(1, len(train_dataset)//n_batches)
-    val_batch_size = max(1, len(val_dataset)//n_batches)
-
-    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
-    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
-
-    #if batchsize provided disregard n_batches
-    if batchsize is not None:
-        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
-        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
-
-
-    earlystopping = EarlyStopping(skip_epochs = 100, patience = patience, min_delta = 0)
-
-
-    pbar = tqdm(range(n_epochs))
-
-    for epoch in pbar:
+#     train_loss = []
+#     val_loss = []
 
 
 
-        tr_epoch_loss = 0
-        val_epoch_loss = 0
+#     if val_dataset is not None:
+
+#         train_size = len(dataset)
+#         val_size = len(val_dataset)
+
+#         train_dataset = dataset
+#         val_dataset = val_dataset
+
+#     else:
+#         train_size = int(0.8*len(dataset))
+#         val_size = len(dataset) - train_size
+
+#         train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+#     #Keep batchsize atleast 1
+#     train_batch_size = max(1, len(train_dataset)//n_batches)
+#     val_batch_size = max(1, len(val_dataset)//n_batches)
+
+#     tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
+#     val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+
+#     #if batchsize provided disregard n_batches
+#     if batchsize is not None:
+#         tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+#         val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
 
 
-        # Training
-        if partial_train:
-            if not hasattr(model, "train_only_decoder"):
-                raise AttributeError("Model does not have 'train_only_decoder' method. Set partial_train=False")
-
-            model.train_only_decoder()
-        else:
-            model.train()
-
-        for train_images, train_label in tr_dataloader:
-
-            train_images, train_label = train_images.to(device), train_label.to(device)
-
-            optimizer.zero_grad()
-
-            output = model(train_images)
-
-            loss = criterion(output, train_label)
-            tr_epoch_loss += loss.item()
-
-            loss.backward()
-            optimizer.step()
-
-        tr_epoch_loss /= len(tr_dataloader)
-
-        train_loss.append(tr_epoch_loss)
-
-        # Validation
-
-        model.eval()
-
-        for val_images, val_label in val_dataloader:
-
-            val_images, val_label = val_images.to(device), val_label.to(device)
+#     earlystopping = EarlyStopping(skip_epochs = 100, patience = patience, min_delta = 0)
 
 
-            output = model.predict(val_images)
+#     pbar = tqdm(range(n_epochs))
 
-            loss = criterion(output, val_label)
+#     for epoch in pbar:
 
 
 
-            val_epoch_loss += loss.item()
-
-        val_epoch_loss /= len(val_dataloader)
-
-
-        val_loss.append(val_epoch_loss)
-
-        pbar.set_postfix(train_loss=f"{tr_epoch_loss:.4f}", val_loss=f"{val_epoch_loss:.4f}")
-
-        if earlystopping(val_epoch_loss, epoch):
-            break
+#         tr_epoch_loss = 0
+#         val_epoch_loss = 0
 
 
+#         # Training
+#         if partial_train:
+#             if not hasattr(model, "train_only_decoder"):
+#                 raise AttributeError("Model does not have 'train_only_decoder' method. Set partial_train=False")
+
+#             model.train_only_decoder()
+#         else:
+#             model.train()
+
+#         for train_images, train_label in tr_dataloader:
+
+#             train_images, train_label = train_images.to(device), train_label.to(device)
+
+#             optimizer.zero_grad()
+
+#             output = model(train_images)
+
+#             loss = criterion(output, train_label)
+#             tr_epoch_loss += loss.item()
+
+#             loss.backward()
+#             optimizer.step()
+
+#         tr_epoch_loss /= len(tr_dataloader)
+
+#         train_loss.append(tr_epoch_loss)
+
+#         # Validation
+
+#         model.eval()
+
+#         for val_images, val_label in val_dataloader:
+
+#             val_images, val_label = val_images.to(device), val_label.to(device)
 
 
-    model.eval()
+#             output = model.predict(val_images)
 
-    return model, train_loss, val_loss
+#             loss = criterion(output, val_label)
+
+
+
+#             val_epoch_loss += loss.item()
+
+#         val_epoch_loss /= len(val_dataloader)
+
+
+#         val_loss.append(val_epoch_loss)
+
+#         pbar.set_postfix(train_loss=f"{tr_epoch_loss:.4f}", val_loss=f"{val_epoch_loss:.4f}")
+
+#         if earlystopping(val_epoch_loss, epoch):
+#             break
+
+
+
+
+#     model.eval()
+
+#     return model, train_loss, val_loss
 
 
 
