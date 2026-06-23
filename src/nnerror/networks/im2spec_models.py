@@ -1,5 +1,7 @@
 import os
 import torch
+from torch.export import dims
+from torch.export import dims
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -14,7 +16,66 @@ from atomai.nets.blocks import ConvBlock as conv_block
 from atomai.nets.blocks import DilatedBlock as dilated_block
 
 
+class Attn_Block(nn.Module):
+    def __init__(self, feature_dims, embed_dim = 32, num_heads = 4):
+        super().__init__()
 
+        if embed_dim % num_heads != 0:
+            raise ValueError("embed_dim must be divisible by num_heads")
+
+        self.feature_dims = feature_dims
+        self.embed_dim = embed_dim
+
+        self.token_projection = nn.Linear(1, embed_dim)
+
+        self.pos_embedding = nn.Parameter(
+            torch.zeros(1, feature_dims, embed_dim)
+        )
+
+        self.attn = nn.MultiheadAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            batch_first=True
+        )
+
+        self.attn_norm = nn.LayerNorm(embed_dim)
+        self.out_projection = nn.Linear(embed_dim, 1)
+
+        self.attn_weights = None
+
+    def forward(self, x, residual = False):
+        """
+        x: [B, D]
+
+        B = batch size
+        D = number of feature tokens
+        embed_dim = embedding size of each token
+        """
+
+        x = x.unsqueeze(-1)                       # [B, D, 1]
+
+        x = self.token_projection(x)              # [B, D, embed_dim]
+
+        x = x + self.pos_embedding                # [B, D, embed_dim]
+
+        attn_output, attn_weights = self.attn(
+            x, x, x,
+            need_weights=True
+        )                                         # [B, D, embed_dim]
+
+        self.attn_weights = attn_weights.detach()       # [B, D, D]
+
+        if residual:
+            x = self.attn_norm(x + attn_output)       # [B, D, embed_dim]
+        else:
+            x = self.attn_norm(attn_output)           # [B, D, embed_dim]
+
+        x = self.out_projection(x).squeeze(-1)    # [B, D]
+
+        return x                                  # [B, D]
+
+    def get_attn_weights(self):
+        return self.attn_weights
 
 
 class im2spec(nn.Module):
@@ -553,6 +614,10 @@ class Swa_Ensemble(nn.Module):
 
         """Move contained model modules to a device or dtype."""
         [model.to(device) for model in self.models]
+
+
+
+
 
 
 

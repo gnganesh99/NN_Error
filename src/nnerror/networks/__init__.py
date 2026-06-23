@@ -1,4 +1,10 @@
-from . import im2spec_models, neuralop_im2spec, nn_combiners
+from . import attn_models, im2spec_models, neuralop_im2spec, nn_combiners
+from .attn_models import (
+    Attn_Block,
+    FNO_im2spec_attn,
+    attn_im2spec,
+    im2spec_attn,
+)
 from .im2spec_models import (
     CustomDecoder,
     DecoderModule,
@@ -29,8 +35,13 @@ from .neuralop_im2spec import (
 
 __all__ = [
     "im2spec_models",
+    "attn_models",
     "neuralop_im2spec",
     "nn_combiners",
+    "Attn_Block",
+    "im2spec_attn",
+    "FNO_im2spec_attn",
+    "attn_im2spec",
     "im2spec",
     "im2spec_2",
     "im2spec_3",

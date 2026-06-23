@@ -10,6 +10,12 @@ from .plot_functions import (
 	plot_spectra,
 	plot_training_loss,
 )
+from .networks import (
+	Attn_Block,
+	FNO_im2spec_attn,
+	attn_im2spec,
+	im2spec_attn,
+)
 from .training_functions import (
 	ELBOLoss,
 	EarlyStopping,
@@ -61,6 +67,10 @@ __all__ = [
 	"plot_scale_slider",
 	"plot_spectra",
 	"plot_training_loss",
+	"Attn_Block",
+	"FNO_im2spec_attn",
+	"attn_im2spec",
+	"im2spec_attn",
 	"ELBOLoss",
 	"EarlyStopping",
 	"EarlyStopping_ensemble",

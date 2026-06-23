@@ -36,6 +36,22 @@ def test_fno_classes():
     )
 
 
+def test_attention_classes():
+    from nnerror.networks import (
+        Attn_Block,
+        FNO_im2spec_attn,
+        attn_im2spec,
+        im2spec_attn,
+    )
+
+    from nnerror import (
+        Attn_Block as TopLevelAttnBlock,
+        FNO_im2spec_attn as TopLevelFNOIm2SpecAttn,
+        attn_im2spec as TopLevelAttnIm2Spec,
+        im2spec_attn as TopLevelIm2SpecAttn,
+    )
+
+
 def test_combiner_classes():
     from nnerror.networks import (
         CombinerCustomDecoder,
