@@ -774,6 +774,7 @@ def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_
         predicted_errors (np.ndarray): Predicted error values corresponding to scale_coordinates.
         aq_fn (np.ndarray): Acquisition function values corresponding to scale_coordinates.
     """
+
     unique_scales = np.unique(scale_coordinates[:, 2])
 
     # min/max for color scaling
@@ -810,8 +811,6 @@ def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_
         axes[0].set_aspect('equal', adjustable='box')
         axes[0].set_xlim(global_x_min, global_x_max)
         axes[0].set_ylim(global_y_min, global_y_max)
-        divider1 = make_axes_locatable(axes[0])
-        cax1 = divider1.append_axes("right", size="5%", pad=0.1)
         fig.colorbar(sc1, cax=cax1)
 
         # aqn function plot
@@ -824,8 +823,6 @@ def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_
         axes[1].set_aspect('equal', adjustable='box')
         axes[1].set_xlim(global_x_min, global_x_max)
         axes[1].set_ylim(global_y_min, global_y_max)
-        divider2 = make_axes_locatable(axes[1])
-        cax2 = divider2.append_axes("right", size="5%", pad=0.1)
         fig.colorbar(sc2, cax=cax2)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent suptitle overlap
