@@ -150,7 +150,7 @@ def plot_error_prediction_3d(
         hi = v.max() if vmax is None else vmax
         rng = hi - lo
         norm = (v - lo) / rng if rng > 0 else np.zeros_like(v)
-        rgba = cm.get_cmap(cmap_name)(norm)
+        rgba = plt.get_cmap(cmap_name)(norm)
         if use_alpha:
             rgba[:, -1] = min_alpha + norm * (max_alpha - min_alpha)
         return rgba, Normalize(vmin=lo, vmax=hi)
@@ -763,3 +763,70 @@ def visualize_attention(
 #     from ipywidgets import SelectionSlider, interact
 #     interact(_draw, scale=SelectionSlider(options=[float(s) for s in scales],
 #                                           description="Scale"))
+
+
+def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_errors, aq_fn):
+    """
+    Plots error and acquisition functions for each unique scale.
+
+    Args:
+        scale_coordinates (np.ndarray): Array containing x, y, and scale coordinates.
+        predicted_errors (np.ndarray): Predicted error values corresponding to scale_coordinates.
+        aq_fn (np.ndarray): Acquisition function values corresponding to scale_coordinates.
+    """
+    unique_scales = np.unique(scale_coordinates[:, 2])
+
+    # min/max for color scaling
+    global_error_min = predicted_errors.min()
+    global_error_max = predicted_errors.max()
+    global_aq_fn_min = aq_fn.min()
+    global_aq_fn_max = aq_fn.max()
+
+    # min/max for X and Y coordinates across scales
+    # Add a small padding to prevent dots from being cut off
+    padding = 10 # Adjust padding value as needed
+    global_x_min = scale_coordinates[:, 0].min() - padding
+    global_x_max = scale_coordinates[:, 0].max() + padding
+    global_y_min = scale_coordinates[:, 1].min() - padding
+    global_y_max = scale_coordinates[:, 1].max() + padding
+
+    # loop through scales
+    for s in unique_scales:
+        fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+        fig.suptitle(f'Error and Acquisition Functions for Scale: {int(s)}', fontsize=16)
+
+        scale_mask = scale_coordinates[:, 2] == s
+        coords_for_scale = scale_coordinates[scale_mask, :2] # x, y coordinates
+        errors_for_scale = predicted_errors[scale_mask]
+        aq_fn_for_scale = aq_fn[scale_mask]
+
+        # error plot
+        sc1 = axes[0].scatter(coords_for_scale[:, 0], coords_for_scale[:, 1],
+                              c=errors_for_scale, cmap='jet', s=50, marker='o', edgecolors='none',
+                              vmin=global_error_min, vmax=global_error_max)
+        axes[0].set_title('Error Function')
+        axes[0].set_xlabel('Y')
+        axes[0].set_ylabel('X')
+        axes[0].set_aspect('equal', adjustable='box')
+        axes[0].set_xlim(global_x_min, global_x_max)
+        axes[0].set_ylim(global_y_min, global_y_max)
+        divider1 = make_axes_locatable(axes[0])
+        cax1 = divider1.append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(sc1, cax=cax1)
+
+        # aqn function plot
+        sc2 = axes[1].scatter(coords_for_scale[:, 0], coords_for_scale[:, 1],
+                              c=aq_fn_for_scale, cmap='jet', s=50, marker='o', edgecolors='none',
+                              vmin=global_aq_fn_min, vmax=global_aq_fn_max)
+        axes[1].set_title('Acquisition Function')
+        axes[1].set_xlabel('Y')
+        axes[1].set_ylabel('X')
+        axes[1].set_aspect('equal', adjustable='box')
+        axes[1].set_xlim(global_x_min, global_x_max)
+        axes[1].set_ylim(global_y_min, global_y_max)
+        divider2 = make_axes_locatable(axes[1])
+        cax2 = divider2.append_axes("right", size="5%", pad=0.1)
+        fig.colorbar(sc2, cax=cax2)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent suptitle overlap
+        plt.show()
