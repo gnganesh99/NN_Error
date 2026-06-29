@@ -165,6 +165,7 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
  
         if swa_triggered:
             swa_sclr.step()
+            
  
         tr_epoch_loss /= len(tr_dataloader)
  
