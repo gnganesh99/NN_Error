@@ -811,7 +811,7 @@ def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_
         axes[0].set_aspect('equal', adjustable='box')
         axes[0].set_xlim(global_x_min, global_x_max)
         axes[0].set_ylim(global_y_min, global_y_max)
-        fig.colorbar(sc1, cax=cax1)
+        fig.colorbar(sc1)
 
         # aqn function plot
         sc2 = axes[1].scatter(coords_for_scale[:, 0], coords_for_scale[:, 1],
@@ -823,7 +823,7 @@ def plot_scale_specific_error_and_acquisition_maps(scale_coordinates, predicted_
         axes[1].set_aspect('equal', adjustable='box')
         axes[1].set_xlim(global_x_min, global_x_max)
         axes[1].set_ylim(global_y_min, global_y_max)
-        fig.colorbar(sc2, cax=cax2)
+        fig.colorbar(sc2)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent suptitle overlap
         plt.show()
