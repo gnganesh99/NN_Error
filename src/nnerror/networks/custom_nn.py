@@ -46,6 +46,7 @@ class custom_nn(nn.Module):
         h, w = h // 2, w // 2
         # After pool3 (halves dimensions again)
         h, w = h // 2, w // 2
+        h, w = h // 2, w // 2 # After pool4
         self.flattened_size = 128 * h * w # 128 is out_channels of conv3
 
         self.fc_encoder = nn.Linear(self.flattened_size, latent_dim)
