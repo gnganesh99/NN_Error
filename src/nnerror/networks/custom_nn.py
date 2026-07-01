@@ -76,6 +76,8 @@ class CustomCNN(nn.Module):
 
         # Flatten the output for the fully connected layers
         x = x.view(-1, self.flattened_size)
+        print("After view:", x.shape)
+
 
         encoded = self.fc_encoder(x)
         return encoded
