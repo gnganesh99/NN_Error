@@ -33,6 +33,10 @@ class custom_nn(nn.Module):
         self.bn3 = nn.BatchNorm2d(128) # Added Batch Normalization
         self.pool3 = nn.MaxPool2d(2, 2) # Added another pooling layer
 
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
+        self.pool4 = nn.MaxPool2d(2, 2)
+
         # Calculate flattened_size dynamically
         # Start with input image dimensions
         h, w = img_size
@@ -61,9 +65,11 @@ class custom_nn(nn.Module):
         if x.dim() == 3: # If input is (batch_size, H, W)
             x = x.unsqueeze(1) # Make it (batch_size, 1, H, W)
 
-        x = self.pool1(F.leaky_relu(self.bn1(self.conv1(x)), negative_slope=0.1)) # LeakyReLU
+        x = self.pool1(F.leaky_relu(self.bn1(self.conv1(x)), negative_slope=0.1))
         x = self.pool2(F.leaky_relu(self.bn2(self.conv2(x)), negative_slope=0.1))
         x = self.pool3(F.leaky_relu(self.bn3(self.conv3(x)), negative_slope=0.1))
+        x = self.pool4(F.leaky_relu(self.bn4(self.conv4(x)), negative_slope=0.1)) 
+
 
         # Flatten the output for the fully connected layers
         x = x.view(-1, self.flattened_size)
