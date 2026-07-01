@@ -50,7 +50,7 @@ class CustomCNN(nn.Module):
         h, w = h // 2, w // 2 # After pool2
         h, w = h // 2, w // 2 # After pool3
         h, w = h // 2, w // 2 # After pool4
-        self.flattened_size = 128 * h * w # 256 is out_channels of conv4
+        self.flattened_size = 256 * h * w # 256 is out_channels of conv4
 
         self.fc_encoder = nn.Linear(self.flattened_size, latent_dim)
 
