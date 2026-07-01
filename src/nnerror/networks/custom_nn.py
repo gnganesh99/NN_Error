@@ -75,9 +75,8 @@ class CustomCNN(nn.Module):
         x = self.pool4(F.leaky_relu(self.bn4(self.conv4(x)), negative_slope=0.1)) # Added new layer to forward pass
 
         # Flatten the output for the fully connected layers
-        print("Before flatten:", x.shape)
         x = x.view(-1, self.flattened_size)
-        print("After view:", x.shape)
+        
 
 
         encoded = self.fc_encoder(x)
