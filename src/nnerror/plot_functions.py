@@ -212,7 +212,7 @@ def plot_training_loss(im2spec_train_loss, im2spec_val_loss, error_train_loss, e
         error_train_loss: Error-model train loss history.
         error_val_loss: Error-model validation loss history.
     """
-    fig, ax = plt.subplots(1,4, figsize = (26,4))
+    fig, ax = plt.subplots(1,4, figsize = (30,4))
 
     n_models = len(im2spec_train_loss)
 
