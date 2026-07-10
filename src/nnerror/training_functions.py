@@ -17,11 +17,15 @@ from tqdm import tqdm
 
 from .networks.im2spec_models import *
 
-def norm_0to1(arr):
+def norm_0to1(arr, eps=1e-8):
     """Normalize an array to the [0, 1] range."""
     arr = np.asarray(arr)
-    arr = (arr - arr.min()) / (arr.max() - arr.min())
-    return arr
+    arr_min = arr.min()
+    arr_range = arr.max() - arr_min
+    if arr_range < eps:
+        print(f"Warning: norm_0to1 array range {arr_range} < eps {eps}; returning zeros.")
+        return np.zeros_like(arr, dtype=float)
+    return (arr - arr_min) / arr_range
 
 
 # Model training function with swa updates
@@ -1363,5 +1367,3 @@ def sort_model_idx(training_loss, last_epochs = 10):
     model_indices = np.argsort(loss_all)
 
     return model_indices
-
-

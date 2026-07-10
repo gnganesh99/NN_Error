@@ -310,6 +310,7 @@ def build_output_file(args, chosen_append_image_type):
 
 
 def main():
+
     args = parse_args()
     set_random_seed(args.seed)
 
