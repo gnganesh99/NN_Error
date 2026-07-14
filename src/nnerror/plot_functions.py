@@ -133,9 +133,10 @@ def plot_error_prediction_3d(
     err_flat = np.asarray(error_mean).ravel()
     aq_flat  = np.asarray(aq_fn).ravel()
 
-    xs = coords_flat[:, 0]
-    ys = coords_flat[:, 1]
-    zs = coords_flat[:, 2]
+    conversion_factor_pixel_to_nm = 0.4833
+    xs = coords_flat[:, 0] * conversion_factor_pixel_to_nm
+    ys = coords_flat[:, 1] * conversion_factor_pixel_to_nm
+    zs = coords_flat[:, 2] * conversion_factor_pixel_to_nm
 
     # ---------------------------------------------------------------
     # 2. Helper: build per-point RGBA so alpha is baked into the color.
@@ -175,14 +176,14 @@ def plot_error_prediction_3d(
     #     depthshade=False,
     # )
     ax0.set_title("Error Map")
-    ax0.set_xlabel("x"); ax0.set_ylabel("y"); ax0.set_zlabel("z")
+    ax0.set_xlabel("x(nm)"); ax0.set_ylabel("y(nm)"); ax0.set_zlabel("Scale (nm)")
     fig.colorbar(ScalarMappable(norm=err_norm, cmap=colormap),
                  ax=ax0, fraction=0.04, pad=0.08)
 
     # --- Acquisition function ---
     ax1.scatter(xs, ys, zs, c=aq_rgba, s=20, edgecolors="none")
     ax1.set_title("Acquisition Function")
-    ax1.set_xlabel("x"); ax1.set_ylabel("y"); ax1.set_zlabel("z")
+    ax1.set_xlabel("x(nm)"); ax1.set_ylabel("y(nm)"); ax1.set_zlabel("Scale (nm)")
     fig.colorbar(ScalarMappable(norm=aq_norm, cmap=colormap),
                  ax=ax1, fraction=0.04, pad=0.08)
 
