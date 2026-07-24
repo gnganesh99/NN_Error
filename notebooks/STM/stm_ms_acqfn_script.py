@@ -78,11 +78,11 @@ from stm_utils import Sxm_Image  # noqa: E402
 # Hyperparameters from the notebook. You can edit these or override most of
 # them from PowerShell with flags such as --acquisition-iterations 100.
 WS = 32
-WS_init = 4
+WS_init = 32 # to prevent augmenting with smaller windows, set WS_init = WS
 d_WS = 4
 n_epochs_im2spec = 100
 n_epochs_error = 100
-error_type = "L1"  # "L1", "L2", or "cos"
+error_type = "cos"  # "L1", "L2", or "cos"
 model_type = "im2spec"
 append_image_type = None  # None chooses based on model_type below.
 use_swa = True
@@ -434,7 +434,7 @@ def main():
             patience=args.patience,
             n_epochs=args.n_epochs_im2spec,
             partial_train=False,
-            val_dataset=im2spec_al_val_dataset,
+            val_dataset=None,
             use_swa=args.use_swa,
             last_swa_epochs=args.last_swa_epochs,
         )
