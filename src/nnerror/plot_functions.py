@@ -133,10 +133,10 @@ def plot_error_prediction_3d(
     err_flat = np.asarray(error_mean).ravel()
     aq_flat  = np.asarray(aq_fn).ravel()
 
-    pixel_to_nm = 0.4833
-    xs = coords_flat[:, 0] * pixel_to_nm 
-    ys = coords_flat[:, 1] * pixel_to_nm 
-    zs = coords_flat[:, 2] * pixel_to_nm 
+    nm_per_pixel = 0.4833
+    xs = coords_flat[:, 0] * nm_per_pixel
+    ys = coords_flat[:, 1] * nm_per_pixel
+    zs = coords_flat[:, 2] * nm_per_pixel
 
     # ---------------------------------------------------------------
     # 2. Helper: build per-point RGBA so alpha is baked into the color.
