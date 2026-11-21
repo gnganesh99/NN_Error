@@ -13,6 +13,7 @@ import os
 import sys
 import types
 from pathlib import Path
+import random
 
 import h5py
 import numpy as np
@@ -75,6 +76,19 @@ from nnerror.utils.im2spec_dataset import paired_images_spectra_1  # noqa: E402
 from stm_utils import Sxm_Image  # noqa: E402
 
 
+
+# For training reproducibility
+seed = 42
+ 
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+
+
 # Hyperparameters from the notebook. You can edit these or override most of
 # them from PowerShell with flags such as --acquisition-iterations 100.
 WS = 32
@@ -99,6 +113,9 @@ n_batches = 6
 lr = 1e-3
 patience = 10
 seed = 42
+scale_type = "ss" # "ms"
+
+each_spectra_norm = False
 
 img_sxm_name = "EnZn2As2017.sxm"
 spectra_sxm_name = "EuZn2As2003.3ds"
@@ -142,6 +159,11 @@ class Norm_0to1:
     def denormalize(self, normalized_data):
         """Denormalize data using stored min and max."""
         return normalized_data * self.data_range + self.min_val
+
+
+def _change_WS_init_for_scale_type(args):
+    if args.scale_type == "ss":  # No augmentation for single-scale
+        args.WS_init = args.WS
 
 
 def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None):
@@ -276,7 +298,7 @@ def parse_args():
     parser.add_argument("--model-type", default=model_type)
     parser.add_argument("--append-image-type", choices=("pad", "interpolate"), default=append_image_type)
     parser.add_argument("--use-swa", dest="use_swa", action="store_true", default=use_swa)
-    parser.add_argument("--no-use-swa", dest="use_swa", action="store_false")
+    #parser.add_argument("--no-use-swa", dest="use_swa", action="store_false")
     parser.add_argument("--latent-dim", type=int, default=latent_dim)
     parser.add_argument("--last-swa-epochs", type=float, default=last_swa_epochs)
     parser.add_argument("--acquisition-iterations", type=int, default=acquisition_iterations)
@@ -293,6 +315,8 @@ def parse_args():
     parser.add_argument("--output-file", type=Path, default=None)
     parser.add_argument("--img-sxm-name", default=img_sxm_name)
     parser.add_argument("--spectra-sxm-name", default=spectra_sxm_name)
+    parser.add_argument("--each-spectra-norm", action='store_true', default=each_spectra_norm)
+    parser.add_argument("--scale-type", choices=("ss", "ms"), default=scale_type)
     return parser.parse_args()
 
 
@@ -304,7 +328,7 @@ def build_output_file(args, chosen_append_image_type):
         f"al_{args.model_type}_{args.error_type}_WS{args.WS}_"
         f"latent{args.latent_dim}_append{chosen_append_image_type}_"
         f"{args.acquisition_iterations}iters_{args.num_new_points}pts_"
-        f"{args.acquisition_method}acq.h5"
+        f"{args.acquisition_method}acq_{args.scale_type}.h5"
     )
     return args.output_folder / filename
 
@@ -314,6 +338,7 @@ def main():
     set_random_seed(args.seed)
 
     chosen_append_image_type = args.append_image_type or default_append_image_type(args.model_type)
+    _change_WS_init_for_scale_type(args)
     output_file = build_output_file(args, chosen_append_image_type)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -336,7 +361,7 @@ def main():
         window_size=args.WS,
         coordinate_step=args.coordinate_step,
         image_norm=False,
-        spectra_norm=False,
+        spectra_norm=args.each_spectra_norm,
     )
 
     print(f"images: {images.shape}, spectra: {spectra.shape}, coordinates: {coordinates.shape}")
