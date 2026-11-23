@@ -66,7 +66,6 @@ from CITS_Class import CITS_Analysis  # noqa: E402
 from nnerror.networks.im2spec_models import CustomDecoder, im2spec  # noqa: E402
 from nnerror.training_functions import (  # noqa: E402
     distance_acq_fn,
-    err_estimation,
     norm_0to1,
     predict_spectra,
     train_model,
@@ -116,6 +115,7 @@ seed = 42
 scale_type = "ss" # "ms"
 
 each_spectra_norm = False
+normalization = "gauss"  # "gauss" (z-score, see design_decisions.md) or "0to1" (previous behaviour)
 
 img_sxm_name = "EnZn2As2017.sxm"
 spectra_sxm_name = "EuZn2As2003.3ds"
@@ -159,6 +159,89 @@ class Norm_0to1:
     def denormalize(self, normalized_data):
         """Denormalize data using stored min and max."""
         return normalized_data * self.data_range + self.min_val
+
+
+class Norm_G:
+    """Gaussian (z-score) normalization: (x - mean) / std.
+
+    axis=None uses one global mean/std; an integer axis gives per-feature statistics.
+    With log=True the data is mapped to log(x + log_eps) before standardizing (for
+    positive, skewed quantities such as errors), and denormalize inverts both steps.
+    """
+
+    def __init__(self, data=None, mean=None, std=None, axis=None, eps=1e-8, log=False, log_eps=None):
+        self.data = data
+        self.axis = axis
+        self.eps = eps
+        self.log = log
+
+        if data is not None:
+            data = np.asarray(data, dtype=np.float64)
+            if log and log_eps is None:
+                # Small offset relative to the data scale so near-zero values don't blow up the log.
+                scale = float(np.mean(np.clip(data, 0, None)))
+                log_eps = 1e-3 * scale if scale > 0 else 1e-8
+            self.log_eps = log_eps
+            transformed = self._forward(data)
+            keepdims = axis is not None
+            self.mean = np.mean(transformed, axis=axis, keepdims=keepdims)
+            self.std = np.std(transformed, axis=axis, keepdims=keepdims)
+        elif mean is not None and std is not None:
+            self.log_eps = log_eps if log_eps is not None else 1e-8
+            self.mean = mean
+            self.std = std
+        else:
+            raise ValueError("Either data or both mean and std must be provided.")
+
+        self.std = np.maximum(self.std, eps)
+
+    def _forward(self, data):
+        if self.log:
+            return np.log(np.clip(data, 0, None) + self.log_eps)
+        return data
+
+    def normalize(self, data=None):
+        """Standardize data using the stored mean and std."""
+        if data is None:
+            if self.data is None:
+                raise ValueError("No data provided to normalize.")
+            data = self.data
+        data = np.asarray(data, dtype=np.float64)
+        return ((self._forward(data) - self.mean) / self.std).astype(np.float32)
+
+    def denormalize(self, normalized_data):
+        """Map standardized values back to the original units."""
+        data = np.asarray(normalized_data, dtype=np.float64) * self.std + self.mean
+        if self.log:
+            data = np.clip(np.exp(data) - self.log_eps, 0, None)
+        return data.astype(np.float32)
+
+
+def spectra_errors(model, images, spectra, spec_norm=None, error_type="L1"):
+    """Per-sample im2spec error in the original spectra units.
+
+    The model predicts normalized spectra; predictions are denormalized with
+    `spec_norm` before comparing them with the original-unit `spectra`, so the
+    recorded errors are comparable across normalization choices and iterations.
+    """
+    n = len(images)
+    pred = np.asarray(predict_spectra(model, images, ensemble=False), dtype=np.float64).reshape(n, -1)
+    if spec_norm is not None:
+        pred = spec_norm.denormalize(pred).astype(np.float64)
+    spectra = np.asarray(spectra, dtype=np.float64).reshape(n, -1)
+
+    if error_type == "L1":
+        error = np.mean(np.abs(pred - spectra), axis=-1)
+    elif error_type == "L2":
+        error = np.mean((pred - spectra) ** 2, axis=-1)
+    elif error_type == "cos":
+        dot = np.sum(pred * spectra, axis=-1)
+        norms = np.linalg.norm(pred, axis=-1) * np.linalg.norm(spectra, axis=-1)
+        error = 1 - dot / np.maximum(norms, 1e-8)
+    else:
+        raise ValueError("Invalid error_type. Valid: L1, L2, cos")
+
+    return error.astype(np.float32)
 
 
 def _change_WS_init_for_scale_type(args):
@@ -236,23 +319,36 @@ def augment_images_by_indices(
     return images_aug, spectra_aug, coords_aug
 
 
-def reduce_errors_and_coords(predicted_errors, scale_coordinates):
+def reduce_errors_and_coords(predicted_errors, scale_coordinates, n_patches):
+    """Minimum predicted error over scales for each patch, returned in patch-index order.
+
+    `scale_coordinates` comes from `append_multiscale_data` on all patches, which stacks
+    one block of `n_patches` rows per scale, so row r belongs to patch `r % n_patches`.
+    Position i of the returned arrays is patch i, so acquisition indices taken from
+    them can be used directly as indices into `images_all` / `train_indices`.
+    """
     predicted_errors = np.asarray(predicted_errors).reshape(-1)
+    if len(predicted_errors) != len(scale_coordinates) or len(predicted_errors) % n_patches != 0:
+        raise ValueError(
+            f"Expected a multiple of {n_patches} rows, got {len(predicted_errors)} errors "
+            f"and {len(scale_coordinates)} coordinates."
+        )
+
     df_errors = pd.DataFrame(
         {
             "x": scale_coordinates[:, 0],
             "y": scale_coordinates[:, 1],
             "scale": scale_coordinates[:, 2],
             "error": predicted_errors,
+            "patch": np.arange(len(predicted_errors)) % n_patches,
         }
     )
 
     reduced = (
-        df_errors.loc[df_errors.groupby(["x", "y"])["error"].idxmin()]
-        .sort_values(["x", "y"])
+        df_errors.loc[df_errors.groupby("patch")["error"].idxmin()]
+        .sort_values("patch")
         .reset_index(drop=True)
     )
-
     errors = reduced["error"].to_numpy()
     coords_reduced = reduced[["x", "y", "scale"]].to_numpy()
 
@@ -317,6 +413,7 @@ def parse_args():
     parser.add_argument("--spectra-sxm-name", default=spectra_sxm_name)
     parser.add_argument("--each-spectra-norm", action='store_true', default=each_spectra_norm)
     parser.add_argument("--scale-type", choices=("ss", "ms"), default=scale_type)
+    parser.add_argument("--norm", choices=("gauss", "0to1"), default=normalization)
     return parser.parse_args()
 
 
@@ -328,7 +425,7 @@ def build_output_file(args, chosen_append_image_type):
         f"al_{args.model_type}_{args.error_type}_WS{args.WS}_"
         f"latent{args.latent_dim}_append{chosen_append_image_type}_"
         f"{args.acquisition_iterations}iters_{args.num_new_points}pts_"
-        f"{args.acquisition_method}acq_{args.scale_type}.h5"
+        f"{args.acquisition_method}acq_{args.scale_type}_norm{args.norm}.h5"
     )
     return args.output_folder / filename
 
@@ -349,7 +446,11 @@ def main():
     spectra_sxm = args.data_folder / args.spectra_sxm_name
 
     full_image = Sxm_Image(img_sxm).image()
-    full_image = norm_0to1(full_image)
+    if args.norm == "gauss":
+        # Global z-score over the whole image (the image is known everywhere, so no leakage).
+        full_image = Norm_G(data=full_image, axis=None).normalize()
+    else:
+        full_image = norm_0to1(full_image)
 
     cits_obj = CITS_Analysis(str(spectra_sxm))
     hyperspectra = cits_obj.current
@@ -382,6 +483,18 @@ def main():
         train_size=args.train_size,
         random_state=args.seed,
     )
+
+    # spectra_all stays in the original (0-1) units. In "gauss" mode the model trains on
+    # globally z-scored spectra, fitted once on the initial training set and kept fixed,
+    # and every recorded error is computed after denormalizing back to original units.
+    if args.norm == "gauss":
+        spec_norm = Norm_G(data=spectra_all[indices_train], axis=None)
+        print(f"Spectra Norm_G: mean={float(spec_norm.mean):.4g}, std={float(spec_norm.std):.4g}")
+    else:
+        spec_norm = None
+
+    def to_model_spectra(spectra_values):
+        return spectra_values if spec_norm is None else spec_norm.normalize(spectra_values)
 
     output_dict = {
         "reduced_errors": [],
@@ -434,12 +547,12 @@ def main():
 
         im2spec_al_training_dataset = TensorDataset(
             torch.tensor(current_images_train, dtype=torch.float32),
-            torch.tensor(current_spectra_train, dtype=torch.float32),
+            torch.tensor(to_model_spectra(current_spectra_train), dtype=torch.float32),
         )
 
         im2spec_al_val_dataset = TensorDataset(
             torch.tensor(images_test_aug, dtype=torch.float32),
-            torch.tensor(spectra_test_aug, dtype=torch.float32),
+            torch.tensor(to_model_spectra(spectra_test_aug), dtype=torch.float32),
         )
 
         imspec_model = get_model(
@@ -463,13 +576,18 @@ def main():
             last_swa_epochs=args.last_swa_epochs,
         )
 
-        error_mean_al, _, _ = err_estimation(
+        error_mean_al = spectra_errors(
             imspec_model,
             current_images_train,
             current_spectra_train,
+            spec_norm=spec_norm,
             error_type=args.error_type,
         )
-        error_norm = Norm_0to1(data=error_mean_al)
+        if args.norm == "gauss":
+            # Errors are positive and skewed: z-score log(error); denormalize maps back to real errors.
+            error_norm = Norm_G(data=error_mean_al, axis=None, log=True)
+        else:
+            error_norm = Norm_0to1(data=error_mean_al)
         error_mean_al = error_norm.normalize(error_mean_al)
         error_targets_al = error_mean_al.astype(np.float32).reshape(-1, 1)
 
@@ -502,10 +620,11 @@ def main():
             last_swa_epochs=args.last_swa_epochs,
         )
 
-        error_mean_test_al, _, _ = err_estimation(
+        error_mean_test_al = spectra_errors(
             imspec_model,
             images_test_aug,
             spectra_test_aug,
+            spec_norm=spec_norm,
             error_type=args.error_type,
         )
         output_dict["im2spec_test_mismatches"].append(error_mean_test_al.flatten())
@@ -526,10 +645,11 @@ def main():
             append_image_type=chosen_append_image_type,
         )
 
-        error_im2spec_al, _, _ = err_estimation(
+        error_im2spec_al = spectra_errors(
             imspec_model,
             images_all_aug,
             spectra_all_aug,
+            spec_norm=spec_norm,
             error_type=args.error_type,
         )
         error_im2spec_al = error_im2spec_al.flatten()
@@ -541,6 +661,7 @@ def main():
         reduced_errors, reduced_coords = reduce_errors_and_coords(
             predicted_errors_current_iter,
             scale_coordinates,
+            n_patches=len(original_indices),
         )
         reduced_errors_im2spec = error_im2spec_al[find_row_indices(scale_coordinates, reduced_coords)]
 

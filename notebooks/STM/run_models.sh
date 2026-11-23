@@ -51,7 +51,7 @@ fi
 labels=("im2spec")
 cli_models=("im2spec")
 acquisition_methods=("distance" "random")
-scale_types=("ss")
+scale_types=("ss" "ms")
 failures=()
 
 for i in "${!labels[@]}"; do
