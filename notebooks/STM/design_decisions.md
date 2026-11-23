@@ -28,3 +28,19 @@ saved in the `.h5` file are therefore in the original spectra units (the 0–1 s
 - With `pad`, the zeroed patch edges now equal the image mean instead of the darkest value.
 - Training targets have std 1 instead of about 0.05, so loss values are larger and not comparable with old runs; `lr` may need retuning.
 - Z-scored spectra are centred, so the model is trained on centred spectra. The `cos` error itself is still computed in real units.
+
+## Validity-mask channel for padded images (`--mask-channel`)
+
+On by default (`--no-mask-channel` turns it off). With `pad` augmentation the image edges are set to 0,
+which in `gauss` mode is the image mean, so on its own the model cannot tell "padded" from "average height".
+A second input channel carries the mask: 1 = valid pixel, 0 = padded pixel. Input shape becomes `(B, 2, H, W)`.
+
+- **Only used for `--scale-type ms` with `pad` and `im2spec`.** In any other case the script prints a
+  message and falls back to single-channel images (`ss` has no padding, and `interpolate` has no
+  invalid pixels).
+- **The mask is built from each row's scale** (`scale_coordinates[:, 2]`, via `edges_zeroed_image` on
+  an all-ones image), not from `image == 0`, because real pixels can be exactly 0 or the mean value.
+- **The mask is not normalized** (it stays 0/1).
+- Implemented in the script with `im2spec_mask` and `CustomDecoder_mask`: the first conv block takes 2
+  input channels, and `forward` does not add a channel axis. The library models are unchanged.
+- Runs that use the mask get `_mask` in the output filename.

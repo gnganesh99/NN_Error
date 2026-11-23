@@ -70,7 +70,8 @@ from nnerror.training_functions import (  # noqa: E402
     predict_spectra,
     train_model,
 )
-from nnerror.utils.image_utils import append_multiscale_data  # noqa: E402
+from nnerror.utils.image_utils import append_multiscale_data, edges_zeroed_image  # noqa: E402
+from atomai.nets.blocks import ConvBlock  # noqa: E402
 from nnerror.utils.im2spec_dataset import paired_images_spectra_1  # noqa: E402
 from stm_utils import Sxm_Image  # noqa: E402
 
@@ -116,6 +117,7 @@ scale_type = "ss" # "ms"
 
 each_spectra_norm = False
 normalization = "gauss"  # "gauss" (z-score, see design_decisions.md) or "0to1" (previous behaviour)
+mask_channel = True  # add a validity-mask image channel; only used for scale_type="ms" with "pad"
 
 img_sxm_name = "EnZn2As2017.sxm"
 spectra_sxm_name = "EuZn2As2003.3ds"
@@ -244,14 +246,89 @@ def spectra_errors(model, images, spectra, spec_norm=None, error_type="L1"):
     return error.astype(np.float32)
 
 
+class im2spec_mask(im2spec):
+    """im2spec taking a 2-channel input (B, 2, H, W): padded image + validity mask.
+
+    Identical to im2spec except the first conv block accepts `in_channels` inputs and
+    forward() does not add a channel axis (the input already has one).
+    """
+
+    def __init__(self, *args, in_channels=2, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.in_channels = in_channels
+        self.enc_conv = ConvBlock(
+            ndim=2, nb_layers=3,
+            input_channels=in_channels, output_channels=self.e_filt,
+            lrelu_a=0.1, batch_norm=True, dropout_=0.5,
+        )
+
+    def forward(self, x):
+        return self.decoder(self.encoder(x))
+
+
+class CustomDecoder_mask(CustomDecoder):
+    """CustomDecoder for multi-channel inputs (no extra channel axis added)."""
+
+    def forward(self, x):
+        return self.decoder(self.encoder(x))
+
+
+_MASK_CACHE = {}
+
+
+def scale_mask(scale, WS):
+    """1 for pixels kept by edges_zeroed_image at this scale, 0 for padded pixels."""
+    key = (int(scale), int(WS))
+    if key not in _MASK_CACHE:
+        ones = np.ones((WS, WS), dtype=np.float32)
+        _MASK_CACHE[key] = ones if scale >= WS else edges_zeroed_image(ones, int(scale))
+    return _MASK_CACHE[key]
+
+
+def add_mask_channel(images_aug, coords_aug):
+    """Stack (M, H, W) images with their scale masks into (M, 2, H, W).
+
+    The mask is built from each row's scale (coords_aug[:, 2]), not from image == 0,
+    because real pixels can be exactly 0 (0to1 norm) or the mean value (gauss norm).
+    """
+    WS = images_aug.shape[-1]
+    masks = np.stack([scale_mask(scale, WS) for scale in coords_aug[:, 2]])
+    return np.stack([images_aug.astype(np.float32), masks], axis=1)
+
+
+def resolve_mask_channel(args, append_image_type):
+    """Keep the mask channel only for im2spec + ms + pad; otherwise fall back to 1 channel."""
+    if not args.mask_channel:
+        return
+    reasons = []
+    if args.scale_type != "ms":
+        reasons.append(f"scale_type={args.scale_type} (no padding)")
+    if append_image_type != "pad":
+        reasons.append(f"append_image_type={append_image_type}")
+    if args.model_type != "im2spec":
+        reasons.append(f"model_type={args.model_type} (mask only implemented for im2spec)")
+    if reasons:
+        print(f"Mask channel disabled ({', '.join(reasons)}); using single-channel images.")
+        args.mask_channel = False
+    else:
+        print("Mask channel enabled: model input is (image, validity mask).")
+
+
 def _change_WS_init_for_scale_type(args):
     if args.scale_type == "ss":  # No augmentation for single-scale
         args.WS_init = args.WS
 
 
-def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None):
+def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None, in_channels=1):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if in_channels != 1:
+        if model_type != "im2spec":
+            raise ValueError(f"in_channels={in_channels} is only supported for im2spec.")
+        return im2spec_mask(
+            feature_size=in_dim, target_size=out_dim, latent_dim=latent_dim, in_channels=in_channels
+        ).to(device)
 
     if model_type == "im2spec":
         model = im2spec(feature_size=in_dim, target_size=out_dim, latent_dim=latent_dim).to(device)
@@ -300,6 +377,7 @@ def augment_images_by_indices(
     WS,
     d_WS,
     append_image_type=None,
+    mask_channel=False,
 ):
     images = images[indices]
     spectra = spectra[indices]
@@ -315,6 +393,9 @@ def augment_images_by_indices(
         coordinates=coordinates,
         append_image_type=append_image_type,
     )
+
+    if mask_channel:
+        images_aug = add_mask_channel(images_aug, coords_aug)
 
     return images_aug, spectra_aug, coords_aug
 
@@ -414,6 +495,10 @@ def parse_args():
     parser.add_argument("--each-spectra-norm", action='store_true', default=each_spectra_norm)
     parser.add_argument("--scale-type", choices=("ss", "ms"), default=scale_type)
     parser.add_argument("--norm", choices=("gauss", "0to1"), default=normalization)
+    parser.add_argument(
+        "--mask-channel", action=argparse.BooleanOptionalAction, default=mask_channel,
+        help="Add a validity-mask image channel (only for --scale-type ms with pad; otherwise ignored).",
+    )
     return parser.parse_args()
 
 
@@ -425,7 +510,8 @@ def build_output_file(args, chosen_append_image_type):
         f"al_{args.model_type}_{args.error_type}_WS{args.WS}_"
         f"latent{args.latent_dim}_append{chosen_append_image_type}_"
         f"{args.acquisition_iterations}iters_{args.num_new_points}pts_"
-        f"{args.acquisition_method}acq_{args.scale_type}_norm{args.norm}.h5"
+        f"{args.acquisition_method}acq_{args.scale_type}_norm{args.norm}"
+        f"{'_mask' if args.mask_channel else ''}.h5"
     )
     return args.output_folder / filename
 
@@ -436,6 +522,7 @@ def main():
 
     chosen_append_image_type = args.append_image_type or default_append_image_type(args.model_type)
     _change_WS_init_for_scale_type(args)
+    resolve_mask_channel(args, chosen_append_image_type)
     output_file = build_output_file(args, chosen_append_image_type)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -528,6 +615,7 @@ def main():
             args.WS,
             args.d_WS,
             append_image_type=chosen_append_image_type,
+            mask_channel=args.mask_channel,
         )
         images_test_aug, spectra_test_aug, coordinates_test = augment_images_by_indices(
             indices_test,
@@ -538,6 +626,7 @@ def main():
             args.WS,
             args.d_WS,
             append_image_type=chosen_append_image_type,
+            mask_channel=args.mask_channel,
         )
 
         print(
@@ -561,6 +650,7 @@ def main():
             out_dim,
             latent_dim=args.latent_dim,
             device=device,
+            in_channels=2 if args.mask_channel else 1,
         )
 
         imspec_model, al_im2spec_train_loss, al_im2spec_val_loss = train_model(
@@ -593,10 +683,13 @@ def main():
 
         model_device = next(imspec_model.parameters()).device
         with torch.no_grad():
-            probe = torch.tensor(images[:1], dtype=torch.float32, device=model_device).unsqueeze(1)
+            probe = torch.tensor(current_images_train[:1], dtype=torch.float32, device=model_device)
+            if probe.ndim == 3:  # single-channel (B, H, W) -> (B, 1, H, W)
+                probe = probe.unsqueeze(1)
             encoder_latent_dim = imspec_model.encoder(probe).shape[1]
 
-        error_model = CustomDecoder(
+        decoder_cls = CustomDecoder_mask if args.mask_channel else CustomDecoder
+        error_model = decoder_cls(
             encoder=imspec_model.encoder,
             embed_dim=encoder_latent_dim,
             target_size=1,
@@ -643,6 +736,7 @@ def main():
             args.WS,
             args.d_WS,
             append_image_type=chosen_append_image_type,
+            mask_channel=args.mask_channel,
         )
 
         error_im2spec_al = spectra_errors(
