@@ -118,14 +118,18 @@ def train_model(model, dataset, n_batches= 3, lr = 0.1, patience = 10, n_epochs 
     train_batch_size = max(1, len(train_dataset)//n_batches)
     val_batch_size = max(1, len(val_dataset)//n_batches)
  
-    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
-    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
- 
     #if batchsize provided disregard n_batches
     if batchsize is not None:
-        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
-        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
- 
+        train_batch_size = batchsize
+        val_batch_size = batchsize
+
+    # Drop the leftover training batch: a final batch of only a few samples gives noisy
+    # BatchNorm statistics, both during training and in SWA's update_bn (which weights every
+    # batch equally). Kept only if dropping it would leave no batches at all.
+    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True,
+                               drop_last = len(train_dataset) >= train_batch_size)
+    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+
  
     earlystopping = EarlyStopping(skip_epochs = 100, patience = patience, min_delta = 0)
  

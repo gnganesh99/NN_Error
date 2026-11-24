@@ -123,7 +123,7 @@ img_sxm_name = "EnZn2As2017.sxm"
 spectra_sxm_name = "EuZn2As2003.3ds"
 
 data_folder = STM_ROOT / "data" / "large_area"
-output_folder = STM_ROOT / "data" / "active_learning_results1"
+output_folder = STM_ROOT / "data" / "active_learning_results2"
 
 
 class Norm_0to1:

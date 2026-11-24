@@ -44,3 +44,50 @@ A second input channel carries the mask: 1 = valid pixel, 0 = padded pixel. Inpu
 - Implemented in the script with `im2spec_mask` and `CustomDecoder_mask`: the first conv block takes 2
   input channels, and `forward` does not add a channel axis. The library models are unchanged.
 - Runs that use the mask get `_mask` in the output filename.
+
+## Drop the leftover training batch (`drop_last`) — 2026-11-24
+
+**Problem:** `train_model` sets the batch size to `len(train) // n_batches` (`n_batches=6`) and used
+to keep the leftover samples as a small extra batch. In `ms` the training set grows by 40 samples per
+iteration, so the leftover cycled 0 → 4 → 2 samples (period 3). That small batch corrupted the
+BatchNorm statistics, both in the last training step of every epoch and in SWA's `update_bn`, which
+weights every batch equally. The result was two error levels:
+
+| `ms` random run (mean test error) | no leftover | leftover 2 | leftover 4 |
+|---|---|---|---|
+| before | 0.0077 | 0.0109 | 0.0104 |
+
+In `ss` (leftover 0–5), the error spikes (about 0.024) were all iterations with a leftover of 1.
+The same bug biased the best-scale choice toward scale 4 (28–30% of patches, against 3% in clean iterations).
+
+**Fix:** in `src/nnerror/training_functions.py`, `train_model`:
+
+```diff
+     train_batch_size = max(1, len(train_dataset)//n_batches)
+     val_batch_size = max(1, len(val_dataset)//n_batches)
+ 
+-    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True)
+-    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+- 
+     #if batchsize provided disregard n_batches
+     if batchsize is not None:
+-        tr_dataloader = DataLoader(train_dataset, batch_size = batchsize, shuffle = True)
+-        val_dataloader = DataLoader(val_dataset, batch_size = batchsize, shuffle = True)
+- 
++        train_batch_size = batchsize
++        val_batch_size = batchsize
++
++    # Drop the leftover training batch: a final batch of only a few samples gives noisy
++    # BatchNorm statistics, both during training and in SWA's update_bn (which weights every
++    # batch equally). Kept only if dropping it would leave no batches at all.
++    tr_dataloader = DataLoader(train_dataset, batch_size = train_batch_size, shuffle = True,
++                               drop_last = len(train_dataset) >= train_batch_size)
++    val_dataloader = DataLoader(val_dataset, batch_size = val_batch_size, shuffle = True)
+```
+
+- Only the training loader drops its leftover batch; the validation loader is unchanged.
+- At most `batch_size - 1` samples (5 or fewer here) are skipped per epoch, and shuffling makes them different each epoch.
+- Check (6 iterations, `ms` random, 100 epochs): mean test error before 0.0076 / 0.0106 / 0.0110 / 0.0081 / 0.0115 / 0.0108,
+  after 0.0076 / 0.0078 / 0.0086 / 0.0079 / 0.0082 / 0.0082.
+- Not changed: `train_model_ensemble` and `train_error_ensemble` have the same leftover-batch pattern but are not used by this script.
+- Results produced before this fix (for example `data/active_learning_results1`, 2026-11-24) were trained with the leftover batch.
