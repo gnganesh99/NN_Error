@@ -185,7 +185,8 @@ class FNO_im2spec_attn(nn.Module):
                  hidden_channels: int = 32,
                  n_modes: tuple = (16, 16),
                  n_layers: int = 4,
-                 mlp_hidden: int = None) -> None:
+                 mlp_hidden: int = None,
+                 readout: str = "global") -> None:
 
         """Initialize FNO_im2spec_attn."""
         super().__init__()
@@ -200,6 +201,7 @@ class FNO_im2spec_attn(nn.Module):
             n_modes=n_modes,
             n_layers=n_layers,
             mlp_hidden=mlp_hidden,
+            readout=readout,
         )
         self.attn_block = Attn_Block(feature_dims=latent_dim, embed_dim=32, num_heads=4)
         self.attn_weights = None

@@ -56,6 +56,13 @@ class FNOEncoder(nn.Module):
         n_layers         (int): Number of stacked Fourier blocks. Default 4.
         mlp_hidden       (int): Width of the MLP head's hidden layer.
                                 Default: same as hidden_channels.
+        readout          (str): How the FNO feature map is reduced before the head.
+                                "global": average over all pixels (original behaviour;
+                                loses where features are relative to the patch centre).
+                                "grid4": average-pool to a 4x4 grid and flatten, which
+                                keeps a coarse spatial layout (see
+                                notebooks/STM/design_decisions.md). Default "global".
+        grid_size        (int): Grid side for readout="grid4". Default 4.
     """
 
     def __init__(
@@ -66,12 +73,17 @@ class FNOEncoder(nn.Module):
         n_modes=(16, 16),
         n_layers=4,
         mlp_hidden=None,
+        readout="global",
+        grid_size=4,
     ):
         """Initialize FNOEncoder."""
         super().__init__()
 
         if mlp_hidden is None:
             mlp_hidden = hidden_channels
+        if readout not in ("global", "grid4"):
+            raise ValueError(f"Unknown readout {readout!r}; use 'global' or 'grid4'.")
+        self.readout = readout
 
         # FNO 2D backbone: maps (B, in_channels, H, W) to (B, hidden_channels, H, W).
         # Setting out_channels=hidden_channels gives a richer feature map than 1.
@@ -86,11 +98,15 @@ class FNOEncoder(nn.Module):
         # Global average pooling over the spatial dims.
         # AdaptiveAvgPool2d((1, 1)) outputs (B, C, 1, 1) for ANY input H, W,
         # which is what gives this whole module its resolution invariance.
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        # readout="grid4" pools to a grid_size x grid_size map instead, so the head
+        # still sees where features are (still independent of the input H, W).
+        pool_size = (1, 1) if readout == "global" else (grid_size, grid_size)
+        self.pool = nn.AdaptiveAvgPool2d(pool_size)
+        head_in = hidden_channels * pool_size[0] * pool_size[1]
 
         # MLP head: projects the pooled feature vector to the desired latent_dim.
         self.head = nn.Sequential(
-            nn.Linear(hidden_channels, mlp_hidden),
+            nn.Linear(head_in, mlp_hidden),
             nn.GELU(),
             nn.Linear(mlp_hidden, latent_dim),
         )
@@ -112,7 +128,8 @@ class FNOEncoder(nn.Module):
         # FNO backbone -> (B, hidden_channels, H, W)
         x = self.fno(x)
 
-        # Pool to (B, hidden_channels, 1, 1), then flatten to (B, hidden_channels)
+        # Pool to (B, hidden_channels, g, g), then flatten to (B, hidden_channels * g * g)
+        # (g = 1 for readout="global", grid_size for readout="grid4")
         x = self.pool(x).flatten(1)
 
         # Project to (B, latent_dim)
@@ -159,7 +176,8 @@ class FNO_im2spec(nn.Module):
                  hidden_channels: int = 32,
                  n_modes: tuple = (16, 16),
                  n_layers: int = 4,
-                 mlp_hidden: int = None) -> None:
+                 mlp_hidden: int = None,
+                 readout: str = "global") -> None:
 
         """Initialize FNO_im2spec."""
         super().__init__()
@@ -174,6 +192,7 @@ class FNO_im2spec(nn.Module):
             n_modes=n_modes,
             n_layers=n_layers,
             mlp_hidden=mlp_hidden,
+            readout=readout,
         )
 
         # Wrap the encoder function into an nn.Module (mirrors im2spec)

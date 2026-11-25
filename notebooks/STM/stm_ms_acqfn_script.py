@@ -118,6 +118,7 @@ scale_type = "ss" # "ms"
 each_spectra_norm = False
 normalization = "gauss"  # "gauss" (z-score, see design_decisions.md) or "0to1" (previous behaviour)
 mask_channel = True  # add a validity-mask image channel; only used for scale_type="ms" with "pad"
+fno_readout = "grid4"  # FNO encoder readout: "grid4" (position-aware) or "global" (original); see design_decisions.md
 
 img_sxm_name = "EnZn2As2017.sxm"
 spectra_sxm_name = "EuZn2As2003.3ds"
@@ -319,7 +320,7 @@ def _change_WS_init_for_scale_type(args):
         args.WS_init = args.WS
 
 
-def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None, in_channels=1):
+def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None, in_channels=1, fno_readout="grid4"):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -341,6 +342,7 @@ def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None, in_channel
             hidden_channels=32,
             n_modes=(16, 16),
             n_layers=4,
+            readout=fno_readout,
         ).to(device)
     elif model_type == "im2spec_attn":
         attn_module = importlib.import_module("nnerror.networks.attn_models")
@@ -355,6 +357,7 @@ def get_model(model_type, in_dim, out_dim, latent_dim=3, device=None, in_channel
             hidden_channels=32,
             n_modes=(16, 16),
             n_layers=4,
+            readout=fno_readout,
         ).to(device)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -499,6 +502,10 @@ def parse_args():
         "--mask-channel", action=argparse.BooleanOptionalAction, default=mask_channel,
         help="Add a validity-mask image channel (only for --scale-type ms with pad; otherwise ignored).",
     )
+    parser.add_argument(
+        "--fno-readout", choices=("grid4", "global"), default=fno_readout,
+        help="FNO encoder readout (FNO and FNO_attn only).",
+    )
     return parser.parse_args()
 
 
@@ -511,7 +518,8 @@ def build_output_file(args, chosen_append_image_type):
         f"latent{args.latent_dim}_append{chosen_append_image_type}_"
         f"{args.acquisition_iterations}iters_{args.num_new_points}pts_"
         f"{args.acquisition_method}acq_{args.scale_type}_norm{args.norm}"
-        f"{'_mask' if args.mask_channel else ''}.h5"
+        f"{'_mask' if args.mask_channel else ''}"
+        f"{'_readout' + args.fno_readout if args.model_type in ('FNO', 'FNO_attn') else ''}.h5"
     )
     return args.output_folder / filename
 
@@ -651,6 +659,7 @@ def main():
             latent_dim=args.latent_dim,
             device=device,
             in_channels=2 if args.mask_channel else 1,
+            fno_readout=args.fno_readout,
         )
 
         imspec_model, al_im2spec_train_loss, al_im2spec_val_loss = train_model(
